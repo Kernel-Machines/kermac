@@ -1,0 +1,6 @@
+torch
+setuptools
+numpy
+ninja
+py-cpuinfo
+scipy
