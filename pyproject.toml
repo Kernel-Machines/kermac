@@ -10,3 +10,4 @@ requires = [
     "scipy"
 ]
 build-backend = "setuptools.build_meta"
+dynamic = ["dependencies"]

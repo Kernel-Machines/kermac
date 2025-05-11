@@ -1,4 +1,4 @@
-#include <kermac_pytorch.h>
+#include "kermac_pytorch.h"
 
 #include <torch/extension.h>
 #include <ATen/cuda/CUDAContext.h>

@@ -1,6 +1,13 @@
+from pathlib import Path
 from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 import os
+
+ROOT = Path(__file__).parent.resolve()        # directory that contains setup.py
+
+def rel(*parts):
+    """Convert project-relative paths to absolute ones."""
+    return str(ROOT.joinpath(*parts))
 
 USE_DEBUG = os.getenv('USE_KERMAC_DEBUG', '0') == '1'
 
@@ -27,8 +34,6 @@ EXTRA_COMPILE_ARGS = {
     'nvcc': get_nvcc_compile_args()
 }
 
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-
 def get_ext_modules():
     return [
         CUDAExtension(
@@ -38,9 +43,9 @@ def get_ext_modules():
                 os.path.join('csrc', 'p_norm_pytorch.cu'),
             ],
             include_dirs=[
-                os.path.join(BASE_DIR, 'csrc'),
-                os.path.join(BASE_DIR, 'csrc', 'include'),
-                os.path.join(BASE_DIR, 'thirdparty','cutlass-stripped','include')
+                rel("csrc"),
+                rel("csrc", "include"),
+                rel("thirdparty", "cutlass-stripped", "include"),
             ],
             extra_compile_args=EXTRA_COMPILE_ARGS,
             extra_link_args=[],
@@ -55,10 +60,11 @@ setup(
     version='0.1',
     package_dir={"": "src"},
     packages=["kermac"],
-    description='PyTorch extension with C++ and CUDA',
+    description='(Ker)nel (Mac)hines. CUDA routines for Nvidia cards.',
     ext_modules=get_ext_modules(),
     cmdclass={
         'build_ext': BuildExtension,
     },
-    install_requires=requirements,
+    install_requires=open("requirements.txt").read().splitlines(),
+    include_package_data=True
 )
