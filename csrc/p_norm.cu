@@ -84,5 +84,5 @@ void tensor_p_norm(
     float* b_t_data_ptr = b_t.data_ptr<float>();
     float* c_data_ptr = c.data_ptr<float>();
 
-
+    printf("cuda here\n");
 }

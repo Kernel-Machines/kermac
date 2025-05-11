@@ -1,3 +1,6 @@
+[project]
+name = "kermac"
+version = "0.1.0"
 [build-system]
 requires = [
     "setuptools",
