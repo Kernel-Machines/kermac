@@ -5,8 +5,11 @@ Only supports sm80 or higher Nvidia cards. This includes:
 * Geforce cards like 3 series and up.
 
 # Install
-I need to setup a build wheel, but for now you should use pip install against this repo. Expect a de
-`pip install git+https://github.com/Kernel-Machines/kermac.git`
+I need to setup a build wheel, but for now you should use pip install against this repo. Expect a decent compile/build time for CUDAExtension. My box takes about 2 minutes.
+
+* `pip install git+https://github.com/Kernel-Machines/kermac.git` 
+
+* `pip install git+https://github.com/Kernel-Machines/kermac.git -vvv` to see what pip is doing for 2 whole minutes.
 
 # cdist_transposed
 A cdist implementation that computes cdist efficiently with a fractional p-value in a tiled and asynchronous copy manner. Requires `cp.async` that is in cards sm80 or higher. 

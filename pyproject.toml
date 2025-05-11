@@ -5,9 +5,7 @@ version = "0.1.0"
 requires = [
     "setuptools",
     "torch",
-    "numpy",
     "ninja",
-    "scipy"
 ]
 build-backend = "setuptools.build_meta"
 dynamic = ["dependencies"]

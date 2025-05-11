@@ -65,6 +65,5 @@ setup(
     cmdclass={
         'build_ext': BuildExtension,
     },
-    install_requires=open("requirements.txt").read().splitlines(),
     include_package_data=True
 )
