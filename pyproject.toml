@@ -1,11 +1,33 @@
-[project]
-name = "kermac"
-version = "0.1.0"
-[build-system]
+[build-system]                    # --- phase ②: build in isolation
 requires = [
-    "setuptools",
-    "torch",
-    "ninja",
+    "setuptools>=70",             # setuptools is the build backend
+    "wheel",
+    "torch>=2.2",                 # torch + ninja are needed *at build time*
+    "ninja"
 ]
 build-backend = "setuptools.build_meta"
-dynamic = ["dependencies"]
+
+[project]                         # --- runtime metadata (PEP 621)
+name = "kermac"
+version = "0.1"
+description = "(Ker)nel (Mac)hines – CUDA kernels for Nvidia GPUs"
+readme = "README.md"
+authors = [{name = "Charlie Durham"}]
+requires-python = ">=3.9"
+
+# Runtime deps – these go into the wheel's Requires-Dist field
+dependencies = [
+    "torch>=2.2",
+    "numpy>=1.26"
+]
+
+[tool.setuptools]                 # --- package discovery rules
+package-dir = {"" = "src"}        # src-layout
+packages = ["kermac"]             # or use automatic discovery
+
+# Non-Python files to ship in sdists/wheels (headers, CUTLASS, …)
+[tool.setuptools.package-data]
+"*" = ["*.h", "*.hpp", "*.cuh"]
+
+# If you *also* want the raw headers outside the package tree (csrc/, thirdparty/)
+# to be in the sdist, keep your MANIFEST.in — setuptools will honour it.

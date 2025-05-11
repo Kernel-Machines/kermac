@@ -2,3 +2,5 @@
 .venv
 *.so
 *__pycache__
+dist
+build
