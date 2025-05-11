@@ -17,6 +17,7 @@ struct SharedStorageNorm
 template <
     bool predicate_reads,
     bool predicate_writes,
+    bool skip_epilogue,
     NormType norm_type,
     class ProblemShape, class CtaTiler, class ThreadTiler,
     class AStride, class ASmemLayout, class TiledCopyA,
@@ -312,19 +313,24 @@ kernel_cute_p_norm(
 
     T p_power_recip = c_one<T> / p_power;
 
-    CUTE_UNROLL
-    for (int i = 0; i < size(tCrC); i++) {
-        T accum = tCrC(i);
-        if constexpr (norm_type == NormType::L1) {
-            accum = accum;
-        } else if constexpr (norm_type == NormType::L2) {
-            accum = _sqrt(accum);
-        } else if constexpr (norm_type == NormType::P) {
-            accum = _pow(accum, p_power_recip);    
-        } else {
-            accum = _nan<T>();
+    if constexpr (skip_epilogue) {
+        // Don't apply the pow(accum, 1.0/p_power) to the result accumulators.
+    } else {
+         // Apply the pow(accum, 1.0/p_power) to the result accumulators.
+        CUTE_UNROLL
+        for (int i = 0; i < size(tCrC); i++) {
+            T accum = tCrC(i);
+            if constexpr (norm_type == NormType::L1) {
+                accum = accum;
+            } else if constexpr (norm_type == NormType::L2) {
+                accum = _sqrt(accum);
+            } else if constexpr (norm_type == NormType::P) {
+                accum = _pow(accum, p_power_recip);    
+            } else {
+                accum = _nan<T>();
+            }
+            tCrC(i) = accum;
         }
-        tCrC(i) = accum;
     }
 
     // Write accumulators

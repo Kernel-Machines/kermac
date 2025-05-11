@@ -2,15 +2,16 @@ import torch
 
 from ._cuda_extension import _p_norm_pytorch
 
-def cdist_transposed(a_t, b_t, p=2.0, out=None):
+def cdist_transposed(a_t, b_t, p=2.0, out=None, skip_epilogue=False):
     """
     Computes a cdist on transposed tensors with input validation.
     
     Args:
         a_t (torch.Tensor): Input tensor of shape (K, M), stride 1 in M, dtype float32, on CUDA.
         b_t (torch.Tensor): Input tensor of shape (K, N), stride 1 in N, dtype float32, on CUDA.
-        p (float, optional): p value for the p-norm distance. 
-        out (torch.Tensor, optional): Output tensor of shape (N, M), stride 1 in M, dtype float32, on CUDA.
+        p (float, optional=2.0): p value for the p-norm distance. 
+        out (torch.Tensor, optional=None): Output tensor of shape (N, M), stride 1 in M, dtype float32, on CUDA.
+        skip_epilogue (bool, optional=False): Avoid the final step of the result where we raise the result to the 1.0/p power.
     
     Returns:
         torch.Tensor: Result tensor (placeholder implementation).
@@ -75,6 +76,7 @@ def cdist_transposed(a_t, b_t, p=2.0, out=None):
     result = torch.zeros((N, M), dtype=torch.float32, device=a_t.device) if out is None else out
     _p_norm_pytorch(
         p,
+        skip_epilogue,
         M, N, K,
         a_t, b_t, 
         result

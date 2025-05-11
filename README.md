@@ -15,45 +15,105 @@ Due to complexity of memory accesses the tensors are required to be `stride==1` 
 
 For other p-values we do `pow(abs(a_k - b_k), p)` while contracting. We apply `pow(accum, 1.0/p)` for the final result.
 
+`skip_epilogue` can be used to avoid performing `pow(accum, 1.0/p)` on the final result.
+
 ### Nerdy note
-The difference in speed between p=1.0 and p=1.1 can be assumed to be directly from the extra clock cycles for `pow(v,p)`. `pow` is implemented with `lg2`, `mul` and `ex2` in ptx assembly. `mul`, `add`, `subtract`, etc.. is 128 results per clock cycle, `lg2` and `ex2` are both 16 results per clock cycle. See godbolt: [__powf](https://godbolt.org/#g:!((g:!((g:!((h:codeEditor,i:(filename:'1',fontScale:14,fontUsePx:'0',j:1,lang:cuda,selection:(endColumn:1,endLineNumber:11,positionColumn:1,positionLineNumber:11,selectionStartColumn:1,selectionStartLineNumber:11,startColumn:1,startLineNumber:11),source:'%0A//+Type+your+code+here,+or+load+an+example.%0A__global__+void+pow(float*+array,+int+n)+%7B%0A++++int+tid+%3D+blockDim.x+*+blockIdx.x+%2B+threadIdx.x%3B%0A++++if+(tid+%3C+n)+%7B%0A++++++++float+v+%3D++array%5Btid%5D%3B%0A++++++++array%5Btid%5D+%3D+__powf(v,+1.3f)%3B%0A++++%7D%0A%7D%0A%0A'),l:'5',n:'0',o:'CUDA+C%2B%2B+source+%231',t:'0')),k:41.815823605706875,l:'4',n:'0',o:'',s:0,t:'0'),(g:!((h:compiler,i:(compiler:nvcc125u1,filters:(b:'0',binary:'1',binaryObject:'1',commentOnly:'0',debugCalls:'1',demangle:'0',directives:'0',execute:'1',intel:'0',libraryCode:'0',trim:'1',verboseDemangling:'0'),flagsViewOpen:'1',fontScale:14,fontUsePx:'0',j:1,lang:cuda,libs:!(),options:'--use_fast_math+-O3',overrides:!(),selection:(endColumn:1,endLineNumber:1,positionColumn:1,positionLineNumber:1,selectionStartColumn:1,selectionStartLineNumber:1,startColumn:1,startLineNumber:1),source:1),l:'5',n:'0',o:'+NVCC+12.5.1+(Editor+%231)',t:'0')),k:24.850843060959793,l:'4',n:'0',o:'',s:0,t:'0'),(g:!((h:device,i:(compilerName:'NVCC+12.5.1',device:PTX,editorid:1,fontScale:14,fontUsePx:'0',j:1,selection:(endColumn:1,endLineNumber:1,positionColumn:1,positionLineNumber:1,selectionStartColumn:1,selectionStartLineNumber:1,startColumn:1,startLineNumber:1),treeid:0),l:'5',n:'0',o:'Device+Viewer+NVCC+12.5.1+(Editor+%231,+Compiler+%231)',t:'0')),k:33.33333333333333,l:'4',n:'0',o:'',s:0,t:'0')),l:'2',n:'0',o:'',t:'0')),version:4).
+The difference in speed between p=1.0 and p=1.1 can be assumed to be directly from the extra clock cycles for `pow(v,p)`. `pow` is implemented with `lg2`, `mul` and `ex2` in ptx assembly. `mul`, `add`, `subtract`, etc.. is 128 results per clock cycle, `lg2` and `ex2` are both 16 results per clock cycle. Check out [godbolt](https://godbolt.org/#g:!((g:!((g:!((h:codeEditor,i:(filename:'1',fontScale:14,fontUsePx:'0',j:1,lang:cuda,selection:(endColumn:1,endLineNumber:11,positionColumn:1,positionLineNumber:11,selectionStartColumn:1,selectionStartLineNumber:11,startColumn:1,startLineNumber:11),source:'%0A//+Type+your+code+here,+or+load+an+example.%0A__global__+void+pow(float*+array,+int+n)+%7B%0A++++int+tid+%3D+blockDim.x+*+blockIdx.x+%2B+threadIdx.x%3B%0A++++if+(tid+%3C+n)+%7B%0A++++++++float+v+%3D++array%5Btid%5D%3B%0A++++++++array%5Btid%5D+%3D+__powf(v,+1.3f)%3B%0A++++%7D%0A%7D%0A%0A'),l:'5',n:'0',o:'CUDA+C%2B%2B+source+%231',t:'0')),k:41.815823605706875,l:'4',n:'0',o:'',s:0,t:'0'),(g:!((h:compiler,i:(compiler:nvcc125u1,filters:(b:'0',binary:'1',binaryObject:'1',commentOnly:'0',debugCalls:'1',demangle:'0',directives:'0',execute:'1',intel:'0',libraryCode:'0',trim:'1',verboseDemangling:'0'),flagsViewOpen:'1',fontScale:14,fontUsePx:'0',j:1,lang:cuda,libs:!(),options:'--use_fast_math+-O3',overrides:!(),selection:(endColumn:1,endLineNumber:1,positionColumn:1,positionLineNumber:1,selectionStartColumn:1,selectionStartLineNumber:1,startColumn:1,startLineNumber:1),source:1),l:'5',n:'0',o:'+NVCC+12.5.1+(Editor+%231)',t:'0')),k:24.850843060959793,l:'4',n:'0',o:'',s:0,t:'0'),(g:!((h:device,i:(compilerName:'NVCC+12.5.1',device:PTX,editorid:1,fontScale:14,fontUsePx:'0',j:1,selection:(endColumn:1,endLineNumber:1,positionColumn:1,positionLineNumber:1,selectionStartColumn:1,selectionStartLineNumber:1,startColumn:1,startLineNumber:1),treeid:0),l:'5',n:'0',o:'Device+Viewer+NVCC+12.5.1+(Editor+%231,+Compiler+%231)',t:'0')),k:33.33333333333333,l:'4',n:'0',o:'',s:0,t:'0')),l:'2',n:'0',o:'',t:'0')),version:4).
 
 ### Results
-On a RTX 4090:
+On a RTX 4090 
+
+#### (L1 Norm)
 ```
 ~/kermac$ python examples/main.py 
 Running p-norm=1.0 with size (30000,1000) by (30000,1000)
 Generating random data..
-Generated random data in: 4051.359 ms
+Generated random data in: 3980.548 ms
 Launching L1 Norm
-kermac.cdist_transposed elapsed time:   68.385 ms
-torch.cdist elapsed time:               3919.779 ms
+kermac.cdist_transposed elapsed time:   67.840 ms
+torch.cdist elapsed time:               3919.742 ms
 kermac.cdist_transposed:
-tensor([[1176.7207, 1163.4862, 1130.6797,  ..., 1166.4866, 1126.9427,
-         1136.0476],
-        [1168.8375, 1112.7660, 1131.2385,  ..., 1136.4324, 1151.6187,
-         1134.0973],
-        [1128.8818, 1103.9948, 1118.8202,  ..., 1124.3627, 1119.5331,
-         1104.5433],
+tensor([[1104.2902, 1102.2158, 1084.7244,  ..., 1158.2500, 1099.5819,
+         1092.7471],
+        [1114.5688, 1136.5596, 1122.0276,  ..., 1136.2686, 1103.1516,
+         1139.1567],
+        [1079.3171, 1114.2296, 1132.8383,  ..., 1121.4536, 1113.2092,
+         1109.5905],
         ...,
-        [1137.7081, 1127.3167, 1102.1724,  ..., 1102.9048, 1110.6974,
-         1121.7233],
-        [1132.7302, 1124.1478, 1089.7920,  ..., 1142.3284, 1126.9645,
-         1103.2474],
-        [1126.5073, 1127.1073, 1160.0742,  ..., 1135.0912, 1143.3641,
-         1128.6945]], device='cuda:0')
+        [1088.6182, 1096.4436, 1089.1270,  ..., 1176.3712, 1103.2915,
+         1109.7858],
+        [1126.6702, 1113.8507, 1120.6118,  ..., 1148.6765, 1135.8652,
+         1147.1234],
+        [1113.4796, 1099.7776, 1080.5443,  ..., 1112.8654, 1095.8372,
+         1121.5585]], device='cuda:0')
 torch.cdist:
-tensor([[1176.7213, 1163.4857, 1130.6792,  ..., 1166.4872, 1126.9426,
-         1136.0464],
-        [1168.8367, 1112.7654, 1131.2379,  ..., 1136.4326, 1151.6174,
-         1134.0964],
-        [1128.8813, 1103.9946, 1118.8197,  ..., 1124.3632, 1119.5332,
-         1104.5442],
+tensor([[1104.2891, 1102.2161, 1084.7249,  ..., 1158.2507, 1099.5811,
+         1092.7467],
+        [1114.5692, 1136.5591, 1122.0278,  ..., 1136.2681, 1103.1512,
+         1139.1577],
+        [1079.3167, 1114.2290, 1132.8389,  ..., 1121.4536, 1113.2091,
+         1109.5908],
         ...,
-        [1137.7083, 1127.3175, 1102.1732,  ..., 1102.9041, 1110.6965,
-         1121.7233],
-        [1132.7302, 1124.1467, 1089.7927,  ..., 1142.3281, 1126.9646,
-         1103.2469],
-        [1126.5068, 1127.1073, 1160.0743,  ..., 1135.0909, 1143.3643,
-         1128.6951]], device='cuda:0')
+        [1088.6173, 1096.4435, 1089.1274,  ..., 1176.3716, 1103.2920,
+         1109.7864],
+        [1126.6700, 1113.8508, 1120.6116,  ..., 1148.6766, 1135.8644,
+         1147.1238],
+        [1113.4790, 1099.7776, 1080.5442,  ..., 1112.8655, 1095.8372,
+         1121.5587]], device='cuda:0')
+```
+#### (L2 Norm)
+```
+~/kermac$ python examples/main.py 
+Running p-norm=2.0 with size (30000,1000) by (30000,1000)
+Generating random data..
+Generated random data in: 3996.537 ms
+Launching L2 Norm
+kermac.cdist_transposed elapsed time:   78.399 ms
+torch.cdist elapsed time:               212.221 ms
+kermac.cdist_transposed:
+tensor([[45.9527, 44.2694, 45.8102,  ..., 44.9583, 43.6784, 45.6395],
+        [45.2251, 44.8852, 45.5869,  ..., 45.2605, 44.6036, 45.0743],
+        [45.0368, 44.7698, 45.6845,  ..., 45.4862, 44.9845, 45.7555],
+        ...,
+        [46.2763, 45.4796, 45.4163,  ..., 45.5491, 44.7861, 46.2175],
+        [45.7084, 45.2250, 42.8998,  ..., 45.0993, 46.5036, 46.3731],
+        [44.9687, 43.8122, 45.5294,  ..., 45.2108, 43.4662, 44.9389]],
+       device='cuda:0')
+torch.cdist:
+tensor([[45.9527, 44.2694, 45.8102,  ..., 44.9583, 43.6784, 45.6395],
+        [45.2251, 44.8852, 45.5869,  ..., 45.2605, 44.6036, 45.0743],
+        [45.0368, 44.7698, 45.6845,  ..., 45.4862, 44.9845, 45.7555],
+        ...,
+        [46.2763, 45.4796, 45.4163,  ..., 45.5492, 44.7861, 46.2175],
+        [45.7084, 45.2250, 42.8998,  ..., 45.0993, 46.5036, 46.3731],
+        [44.9687, 43.8122, 45.5293,  ..., 45.2108, 43.4662, 44.9389]],
+       device='cuda:0')
+```
+#### (P-Norm: 1.3f)
+```
+~/kermac$ python examples/main.py 
+Running p-norm=1.3 with size (30000,1000) by (30000,1000)
+Generating random data..
+Generated random data in: 4001.529 ms
+Launching Norm-P=1.300
+kermac.cdist_transposed elapsed time:   334.805 ms
+torch.cdist elapsed time:               4144.665 ms
+kermac.cdist_transposed:
+tensor([[248.7032, 259.8393, 241.4097,  ..., 248.2398, 261.0034, 241.5130],
+        [245.4600, 242.3709, 243.5946,  ..., 249.2112, 245.0326, 244.2303],
+        [245.1459, 247.6284, 243.0163,  ..., 250.0242, 238.4540, 239.3967],
+        ...,
+        [249.5395, 249.6548, 247.7663,  ..., 254.2753, 248.5217, 245.7377],
+        [259.2698, 252.7882, 249.9454,  ..., 246.9260, 255.8708, 242.5159],
+        [250.6359, 245.9745, 245.7898,  ..., 246.2731, 248.6370, 236.3426]],
+       device='cuda:0')
+torch.cdist:
+tensor([[248.7032, 259.8394, 241.4099,  ..., 248.2400, 261.0034, 241.5131],
+        [245.4601, 242.3709, 243.5948,  ..., 249.2113, 245.0327, 244.2302],
+        [245.1461, 247.6285, 243.0164,  ..., 250.0242, 238.4543, 239.3968],
+        ...,
+        [249.5395, 249.6548, 247.7664,  ..., 254.2753, 248.5219, 245.7379],
+        [259.2698, 252.7882, 249.9453,  ..., 246.9260, 255.8709, 242.5160],
+        [250.6360, 245.9746, 245.7898,  ..., 246.2731, 248.6369, 236.3427]],
+       device='cuda:0')
 ```

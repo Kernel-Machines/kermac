@@ -5,7 +5,8 @@ M = 30000
 N = 30000
 K = 1000
 # Change this to i.e. 1.0, 1.3, 2.0 etc...
-p = 1.0
+p = 1.3
+skip_epilogue=False
 
 start_event = torch.cuda.Event(enable_timing=True)
 end_event = torch.cuda.Event(enable_timing=True)
@@ -24,7 +25,7 @@ elapsed_time_ms = start_event.elapsed_time(end_event)
 print(f"Generated random data in: {elapsed_time_ms:.3f} ms")
 
 start_event.record()
-c = kermac.cdist_transposed(a, b, p=p,out=c)
+c = kermac.cdist_transposed(a, b, p=p,out=c,skip_epilogue=skip_epilogue)
 end_event.record()
 
 torch.cuda.synchronize()  # Wait for GPU to finish

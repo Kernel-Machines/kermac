@@ -10,6 +10,7 @@ static
 void
 cute_p_norm_m128n128k8p2(
     T p_power,
+    bool skip_epilogue,
     int m, // M
     int n, // N
     int k, // D
@@ -74,31 +75,64 @@ cute_p_norm_m128n128k8p2(
     );
 
     if (p_power == 1.0f) {
-        printf("Launching L1 Norm\n");
-        kernel_cute_p_norm<true, true, NormType::L1><<<dimGrid, dimBlock, smem_size, stream>>>(
-            prob_shape, cta_tiler, thread_tiler,
-            A, dA, sA, copyA,
-            B, dB, sB, copyB,
-            C, dC, sC,
-            p_power
-        );
+        if (skip_epilogue) {
+            printf("Launching L1 Norm, skipping epilogue\n");
+            kernel_cute_p_norm<true, true, true, NormType::L1><<<dimGrid, dimBlock, smem_size, stream>>>(
+                prob_shape, cta_tiler, thread_tiler,
+                A, dA, sA, copyA,
+                B, dB, sB, copyB,
+                C, dC, sC,
+                p_power
+            );
+        } else {
+            printf("Launching L1 Norm\n");
+            kernel_cute_p_norm<true, true, false, NormType::L1><<<dimGrid, dimBlock, smem_size, stream>>>(
+                prob_shape, cta_tiler, thread_tiler,
+                A, dA, sA, copyA,
+                B, dB, sB, copyB,
+                C, dC, sC,
+                p_power
+            );
+        }
     } else if (p_power == 2.0f) {
-        printf("Launching L2 Norm\n");
-        kernel_cute_p_norm<true, true, NormType::L2><<<dimGrid, dimBlock, smem_size, stream>>>(
-            prob_shape, cta_tiler, thread_tiler,
-            A, dA, sA, copyA,
-            B, dB, sB, copyB,
-            C, dC, sC,
-            p_power
-        );
+        if (skip_epilogue) {
+            printf("Launching L2 Norm, skipping epilogue\n");
+            kernel_cute_p_norm<true, true, true, NormType::L2><<<dimGrid, dimBlock, smem_size, stream>>>(
+                prob_shape, cta_tiler, thread_tiler,
+                A, dA, sA, copyA,
+                B, dB, sB, copyB,
+                C, dC, sC,
+                p_power
+            );
+        } else {
+            printf("Launching L2 Norm\n");
+            kernel_cute_p_norm<true, true, false, NormType::L2><<<dimGrid, dimBlock, smem_size, stream>>>(
+                prob_shape, cta_tiler, thread_tiler,
+                A, dA, sA, copyA,
+                B, dB, sB, copyB,
+                C, dC, sC,
+                p_power
+            );
+        }
     } else {
-        printf("Launching Norm-P=%0.3f\n", p_power);
-        kernel_cute_p_norm<true, true, NormType::P><<<dimGrid, dimBlock, smem_size, stream>>>(
-            prob_shape, cta_tiler, thread_tiler,
-            A, dA, sA, copyA,
-            B, dB, sB, copyB,
-            C, dC, sC,
-            p_power
-        );
+        if (skip_epilogue) {
+            printf("Launching Norm-P=%0.3f, skipping epilogue\n", p_power);
+            kernel_cute_p_norm<true, true, true, NormType::P><<<dimGrid, dimBlock, smem_size, stream>>>(
+                prob_shape, cta_tiler, thread_tiler,
+                A, dA, sA, copyA,
+                B, dB, sB, copyB,
+                C, dC, sC,
+                p_power
+            );
+        } else {
+            printf("Launching Norm-P=%0.3f\n", p_power);
+            kernel_cute_p_norm<true, true, false, NormType::P><<<dimGrid, dimBlock, smem_size, stream>>>(
+                prob_shape, cta_tiler, thread_tiler,
+                A, dA, sA, copyA,
+                B, dB, sB, copyB,
+                C, dC, sC,
+                p_power
+            );
+        }
     }
 }
