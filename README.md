@@ -16,6 +16,18 @@ This avoids a long build time. If this doesn't work due to cuda versions or pyth
 
 * `pip install git+https://github.com/Kernel-Machines/kermac.git -vvv` to see what bullshit pip is doing for 2 whole minutes.
 
+# Check Install
+Either run `examples/main.py` or in the repl you can do:
+``` python
+import kermac
+import torch
+
+a = torch.randn(10,100).cuda() # Because of cdist_transposed this will reflect a tensor with 100 rows and 10 columns
+b = torch.randn(10,20).cuda()  # Because of cdist_transposed this will reflect a tensor with 20 rows and 10 columns
+c = kermac.cdist_transposed(a,a) # this will return a tensor with 100 rows and 20 columns shaped like (20,100)
+print(c)
+```
+
 # cdist_transposed
 A cdist implementation that computes cdist efficiently with a fractional p-value in a tiled and asynchronous copy manner. Requires `cp.async` that is in cards sm80 or higher. 
 
