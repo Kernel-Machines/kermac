@@ -9,10 +9,12 @@ NAME="kermac"
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 PY_SRC_DIR = os.path.join(BASE_DIR, 'kermac','csrc')
 INCLUDE_DIRS = [
-    os.path.join(BASE_DIR, 'kermac','csrc')
+    os.path.join(BASE_DIR, 'kermac','csrc'),
+    os.path.join(BASE_DIR, 'thirdparty','cutlass-stripped','include')
 ]
 SOURCES = [
     os.path.join(PY_SRC_DIR, 'bindings.cpp'),
+    os.path.join(PY_SRC_DIR, 'p_norm.cu'),
     os.path.join(PY_SRC_DIR, 'utils.cu'),
 ]
 EXTRA_LINK_ARGS = []
@@ -30,6 +32,10 @@ def get_nvcc_compile_args():
     if USE_DEBUG:
         return ['-g']
     return [
+        '-Xptxas=-v',
+        '--expt-relaxed-constexpr',
+        '-Xcompiler=-fno-strict-aliasing',
+        '--expt-extended-lambda',
         '-O3',
     ]
 
