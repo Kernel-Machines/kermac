@@ -5,11 +5,16 @@ Only supports sm80 or higher Nvidia cards. This includes:
 * Geforce cards like 3 series and up.
 
 # Install
-I need to setup a build wheel, but for now you should use pip install against this repo. Expect a decent compile/build time for CUDAExtension. My box takes about 2 minutes.
+
+You can install using the latest wheel with:
+
+`pip install https://github.com/Kernel-Machines/kermac/releases/download/v0.1.0/kermac-0.1-cp312-cp312-linux_x86_64.whl`
+
+This avoids a long build time. If this doesn't work due to cuda versions or python/pytorch versions please let me know. You can instead install with the following which requires a decent compile time and python dev headers if you get an error:
 
 * `pip install git+https://github.com/Kernel-Machines/kermac.git` 
 
-* `pip install git+https://github.com/Kernel-Machines/kermac.git -vvv` to see what pip is doing for 2 whole minutes.
+* `pip install git+https://github.com/Kernel-Machines/kermac.git -vvv` to see what bullshit pip is doing for 2 whole minutes.
 
 # cdist_transposed
 A cdist implementation that computes cdist efficiently with a fractional p-value in a tiled and asynchronous copy manner. Requires `cp.async` that is in cards sm80 or higher. 
