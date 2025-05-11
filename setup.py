@@ -12,6 +12,7 @@ def abspath(*parts):           # helper for absolute -I flags
 
 USE_DEBUG = os.getenv("USE_KERMAC_DEBUG") == "1"
 
+# Setting compilation to sm80 for cp.async
 EXTRA_COMPILE_ARGS = {
     "cxx": ["-g"] if USE_DEBUG else ["-O3"],
     "nvcc": (["-g"] if USE_DEBUG else [
@@ -20,6 +21,7 @@ EXTRA_COMPILE_ARGS = {
         "--expt-extended-lambda",
         "-Xcompiler=-fno-strict-aliasing",
         "-O3",
+        "--generate-code=arch=compute_80,code=sm_80"
     ]),
 }
 

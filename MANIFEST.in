@@ -1,2 +1,2 @@
-recursive-include csrc *.h *.hpp *.cuh
+recursive-include csrc *.h *.cuh
 recursive-include thirdparty/cutlass-stripped/include *.*
