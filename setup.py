@@ -1,7 +1,6 @@
-from setuptools import setup, Extension, find_packages
+from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 import os
-import sys
 
 USE_DEBUG = os.getenv('USE_KERMAC_DEBUG', '0') == '1'
 
@@ -36,11 +35,12 @@ def get_ext_modules():
             name="kermac._cuda_extension",
             sources=[
                 os.path.join('csrc', 'bindings.cpp'),
-                os.path.join('csrc', 'p_norm.cu'),
+                os.path.join('csrc', 'p_norm_pytorch.cu'),
             ],
             include_dirs=[
-                os.path.join('csrc'),
-                os.path.join(BASE_DIR,'thirdparty','cutlass-stripped','include')
+                os.path.join(BASE_DIR, 'csrc'),
+                os.path.join(BASE_DIR, 'csrc', 'include'),
+                os.path.join(BASE_DIR, 'thirdparty','cutlass-stripped','include')
             ],
             extra_compile_args=EXTRA_COMPILE_ARGS,
             extra_link_args=[],

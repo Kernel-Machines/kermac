@@ -1,12 +1,13 @@
-#include "kermac.h"
+#include <kermac_pytorch.h>
 
 #include <torch/extension.h>
 #include <ATen/cuda/CUDAContext.h>
 
 #include <stdio.h>
-#include <cute/tensor.hpp>
+#include <p_norm_impl.cuh>
 
-void tensor_p_norm(
+void _p_norm_pytorch(
+    float p_power,
     int M, int N, int K,
     torch::Tensor a_t, // [K, M] => M,K : M-Major
     torch::Tensor b_t, // [K, N] => N,K : N-Major
@@ -84,5 +85,18 @@ void tensor_p_norm(
     float* b_t_data_ptr = b_t.data_ptr<float>();
     float* c_data_ptr = c.data_ptr<float>();
 
-    printf("cuda here\n");
+    int ldA = a_t.stride(0);
+    int ldB = b_t.stride(0);
+    int ldC = c.stride(0);
+
+    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+
+    cute_p_norm_m128n128k8p2(
+        p_power,
+        M, N, K,
+        a_t_data_ptr, ldA,
+        b_t_data_ptr, ldB,
+        c_data_ptr, ldC,
+        stream
+    );
 }

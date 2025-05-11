@@ -1,7 +1,7 @@
 #include <torch/extension.h>
 
-#include "kermac.h"
+#include <kermac_pytorch.h>
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-    m.def("tensor_p_norm", &tensor_p_norm, "tensor_p_norm");
+    m.def("_p_norm_pytorch", &_p_norm_pytorch, "_p_norm_pytorch");
 }
