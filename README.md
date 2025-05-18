@@ -9,13 +9,14 @@ However they only support **sm_80** or higher Nvidia cards. This includes:
 
 ## Install
 
-### CUDA 11
-``` bash
-pip install "kermac[cu11] @ git+https://github.com/Kernel-Machines/kermac"
-```
 ### CUDA 12
 ``` bash
 pip install "kermac[cu12] @ git+https://github.com/Kernel-Machines/kermac"
+```
+
+### CUDA 11
+``` bash
+pip install "kermac[cu11] @ git+https://github.com/Kernel-Machines/kermac"
 ```
 
 ### Check Install
