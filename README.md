@@ -20,7 +20,12 @@ pip install "kermac[cu11] @ git+https://github.com/Kernel-Machines/kermac"
 ```
 
 ### Check Install
-Either run `examples/main.py` or in the repl you can do:
+From a fresh environment you can do:
+``` bash
+wget https://raw.githubusercontent.com/Kernel-Machines/kermac/refs/heads/master/examples/cdist.py
+python cdist.py -d -p 1.0
+```
+or from a python repl you can do:
 ``` python
 import kermac
 import torch
