@@ -1,0 +1,39 @@
+[project]
+name            = "kermac"
+version         = "0.1.0"                       # or make this dynamic later
+description     = "Fast Pytorch routines for (Ker)nel (Mac)hines"
+readme          = "README.md"
+requires-python = ">=3.8"
+license         = {text = "MIT"}
+authors         = [{name="Kernel Machines", email="kernel_machines@pm.me"}]
+dependencies    = [
+  "numpy>=1.21",
+  "platformdirs>=3.0",
+  "torch>=2.0"
+]
+
+[project.optional-dependencies]
+cu11 = ["cuda-core[cu11]>=0.1"]
+cu12 = ["cuda-core[cu12]>=0.1"]
+
+[project.urls]
+Homepage   = "https://github.com/Kernel-Machines/kermac"
+Repository = "https://github.com/Kernel-Machines/kermac.git"
+
+[build-system]
+requires       = ["hatchling>=1.24"]
+build-backend  = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages      = ["src/kermac"]
+
+[tool.hatch.build.targets.wheel.force-include]
+include = "include"
+csrc = "csrc"
+ptx = "ptx"
+
+[tool.hatch.build.targets.sdist]
+[tool.hatch.build.targets.sdist.force-include]
+include = "include"
+csrc = "csrc"
+ptx = "ptx"
