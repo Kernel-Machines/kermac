@@ -1,7 +1,7 @@
 # kermac
 Pytorch routines for (Ker)nel (Mac)hines.
 
-### These routines are very fast
+## These routines are very fast
 
 However they only support **sm_80** or higher Nvidia cards. This includes:
 * Server cards like A100 and up.
