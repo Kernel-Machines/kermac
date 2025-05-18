@@ -1,5 +1,7 @@
+![function](media/frame179_2min_crop.jpg)
 # kermac
 Pytorch routines for (Ker)nel (Mac)hines
+
 
 ## These routines are very fast
 
