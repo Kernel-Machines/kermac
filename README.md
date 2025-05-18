@@ -38,7 +38,7 @@ c = kermac.cdist_t(a,b)         # this will return a tensor with 100 rows and 20
 print(c)
 ```
 
-# kermac.cdist_t
+## Function: cdist_t
 A reimplementation of [`torch.cdist`](https://docs.pytorch.org/docs/stable/generated/torch.cdist.html). Computes fractional norms. Requires tensors to be transposed w.r.t. input tensors in `torch.cdist`. Does not support batches yet.
 
 Has special code paths for $p=1.0$ and $p=2.0$ to avoid fractional power instructions.
