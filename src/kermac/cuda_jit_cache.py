@@ -39,67 +39,44 @@ class DeviceModuleMap(metaclass=Singleton):
                 package_version = get_package_version()
                 cubin_path = get_cache_cubin_dir() / f'{package_name}.{package_version}.{arch}.{module_name}.cubin'
                 if debug:
-                    print(f'(Kermac Debug) Loaded module not found for (device:{device_id}, module:{module_name}), looking for pre-built cubin')
+                    print(f'(Kermac Debug) Loaded module not found for (device:{device_id}, module:{module_name})')
+                    print(f'(Kermac Debug) For {cubin_path}')
                 if cubin_path.is_file():
                     if debug:
-                        print(f'(Kermac Debug) Found matching cubin at {cubin_path}')
+                        print(f'(Kermac Debug)\t\tFound pre-built cubin')
                     module_cubin = ObjectCode.from_cubin(str(cubin_path))
                 else:
                     if debug:
-                        print(f'(Kermac Debug) Cubin not found: {cubin_path}')
-                    if True: # Generate from cuda src
-                        cuda_code_path = get_local_cuda_src_dir() / 'p_norm.cu'
-                        with open(cuda_code_path, "r", encoding="utf-8") as f:
-                            code = f.read()  # Read as text
-                            module_cubin = Program(
-                                code, 
-                                code_type="c++", 
-                                options= \
-                                    ProgramOptions(
-                                        std="c++17",
+                        print(f'(Kermac Debug)\t\tNot found, building..')
+                    cuda_code_path = get_local_cuda_src_dir() / f'{module_name}.cu'
+                    with open(cuda_code_path, "r", encoding="utf-8") as f:
+                        code = f.read()  # Read as text
+                        module_cubin = Program(
+                            code, 
+                            code_type="c++", 
+                            options= \
+                                ProgramOptions(
+                                    std="c++17",
+                                    arch=f"sm_{arch}",
+                                    device_as_default_execution_space=True,
+                                    # diag_suppress cutlass: 64-D: declaration does not declare anything
+                                    # diag_suppress cutlass: 1055-D: declaration does not declare anything
+                                    diag_suppress=[64,1055], 
 
-                                        arch=f"sm_{arch}",
-                                        device_as_default_execution_space=True,
-                                        
-                                        include_path=[
-                                            get_include_local_cuda_dir(),       # *.cuh
-                                            get_include_dir_cutlass(),          # main cutlass include
-                                            get_include_dir_cutlass_tools(),    # cutlass tools include
-                                            get_include_dir_cuda()              # cuda toolkit for <cuda/src/assert>, etc.. (dependency of cutlass)
-                                        ],
-                                    )
-                            ).compile(
-                                "cubin", 
-                                logs=sys.stdout,
-                            )
-                            with open(cubin_path, 'wb') as file:
-                                file.write(module_cubin.code)
-                    else: # Generate from ptx instead
-                        ptx_code_gz_path = get_local_ptx_src_dir() / f'{module_name}.ptx.gz'
-                        if debug:
-                            print(f'(Kermac Debug) Looking for compressed pre-built ptx at {ptx_code_gz_path}')
-                        with open(ptx_code_gz_path, "rb") as file:
-                            compressed_data = file.read()
-                        with gzip.GzipFile(fileobj=io.BytesIO(compressed_data), mode='rb') as gz:
-                            ptx_bytes = gz.read()
-                            module_ptx_deserialized = ObjectCode.from_ptx(ptx_bytes)
-                        if debug:
-                            print(f'(Kermac Debug) Found compressed pre-built ptx, compiling..')
-                        # Compile ptx to cubin
-                        module_cubin = \
-                            Program(
-                                module_ptx_deserialized.code.decode(), 
-                                code_type="ptx", 
-                                options= \
-                                    ProgramOptions(
-                                        arch=f"sm_{arch}"
-                                    )
-                            ).compile("cubin", logs=sys.stdout)
+                                    include_path=[
+                                        get_include_local_cuda_dir(),   # *.cuh
+                                        get_include_dir_cutlass(),      # main cutlass include
+                                        get_include_dir_cuda()          # cuda toolkit for <cuda/src/assert>, etc.. (dependency of cutlass)
+                                    ],
+                                )
+                        ).compile(
+                            "cubin", 
+                            logs=sys.stdout,
+                        )
                         with open(cubin_path, 'wb') as file:
                             file.write(module_cubin.code)
                         if debug:
-                            print(f'(Kermac Debug) Done compiling, storing cubin at {cubin_path}')
-                            
+                            print(f'(Kermac Debug)\t\tBuilt and saved')
                 self._modules[key] = module_cubin
                 return module_cubin
             else:

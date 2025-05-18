@@ -54,17 +54,11 @@ def get_top_level_repo_dir(dir) -> Path:
 def get_local_cuda_src_dir() -> Path:
     return get_top_level_repo_dir('csrc')
 
-def get_local_ptx_src_dir() -> Path:
-    return get_top_level_repo_dir('ptx')
-
 def get_include_local_cuda_dir() -> Path:
     return get_top_level_repo_dir('include')
 
 def get_include_dir_cutlass() -> Path:
     return get_top_level_repo_dir('thirdparty') / 'cutlass/include'
-
-def get_include_dir_cutlass_tools() -> Path:
-    return get_top_level_repo_dir('thirdparty') / 'cutlass/tools/util/include'
 
 def get_include_dir_cuda() -> Path:
     """Best-effort guess of the Toolkit’s <cuda>/include directory."""

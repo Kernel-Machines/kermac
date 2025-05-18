@@ -4,7 +4,7 @@
 #include <cuda/std/cstdint>
 #include <cuda/std/type_traits>
 
-// Define custom is_same and is_same_v
+// Define custom is_same and is_same_v for cutlass
 namespace std {
 
 template<typename T, typename U>

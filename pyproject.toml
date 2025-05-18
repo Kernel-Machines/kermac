@@ -30,12 +30,10 @@ packages      = ["src/kermac"]
 [tool.hatch.build.targets.wheel.force-include]
 include = "include"
 csrc = "csrc"
-ptx = "ptx"
 thirdparty = "thirdparty"
 
 [tool.hatch.build.targets.sdist]
 [tool.hatch.build.targets.sdist.force-include]
 include = "include"
 csrc = "csrc"
-ptx = "ptx"
 thirdparty = "thirdparty"
