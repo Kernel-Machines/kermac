@@ -47,8 +47,8 @@ class DeviceModuleMap(metaclass=Singleton):
                 else:
                     if debug:
                         print(f'(Kermac Debug) Cubin not found: {cubin_path}')
-                    if False: # Generate from cuda, doesn't work due to jit and is_same_v errors
-                        cuda_code_path = get_local_cuda_src_dir() / 'kermac.cu'
+                    if True: # Generate from cuda src
+                        cuda_code_path = get_local_cuda_src_dir() / 'p_norm.cu'
                         with open(cuda_code_path, "r", encoding="utf-8") as f:
                             code = f.read()  # Read as text
                             module_cubin = Program(
