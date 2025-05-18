@@ -1,13 +1,13 @@
 ![function](media/frame179_2min_crop.jpg)
 # kermac
-Pytorch routines for (Ker)nel (Mac)hines
+**Pytorch** routines for (**Ker**)nel (**Mac**)hines
 
 
 ## These routines are very fast
 
-However they only support **sm_80** or higher Nvidia cards. This includes:
-* Server cards like A100 and up.
-* Geforce cards like 3 series and up.
+However they only support **sm_80** or higher **Nvidia** cards. This includes:
+* Server cards like **A10**, **A100**, **H100**, **B100**
+* Consumer **RTX 30xx**, **RTX 40xx**, **RTX 50xx**
 
 ## Install
 
