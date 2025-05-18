@@ -32,11 +32,26 @@ print(c)
 ```
 
 # kermac.cdist_t
-`kermac.cdist_t` can beat `torch.cdist` both operating in cuda by up to:
-* **60x** for **p=1.0**
-* **12x** for **fractional-p**, i.e. **p=1.3**
-* **3x** for **p=2.0** (`torch.cdist` uses gemm trick for **p=2.0**)
+A reimplementation of [`torch.cdist`](https://docs.pytorch.org/docs/stable/generated/torch.cdist.html). Computes fractional norms. Requires tensors to be transposed w.r.t. input tensors in `torch.cdist`. Does not support batches yet.
 
+Has special code paths for $p=1.0$ and $p=2.0$ to avoid fractional power instructions.
+### `kermac.cdist_t` vs `torch.cdist`
+with problem size $[M,N,K]$ = $[30000,30000,1024]$
+
+| GPU / p-norm | Speed-up (×) | kermac.cdist_t (ms) | torch.cdist (ms) |
+|:-------------|-------------:|--------------------:|-----------------:|
+| **GH200 · p = 1.0**      | **29.1×** | 82  | 2,389 |
+| **GH200 · p = 1.3**      | **9.6×**  | 453 | 4,360 |
+| **GH200 · p = 2.0**      | **5.2×**  | 79  | 406  |
+| **H100-PCIe · p = 1.0**  | **27.0×** | 108 | 2,907 |
+| **H100-PCIe · p = 1.3**  | **9.4×**  | 592 | 5,591 |
+| **H100-PCIe · p = 2.0**  | **3.3×**  | 104 | 346  |
+| **A100 · p = 1.0**       | **15.4×** | 251 | 3,878 |
+| **A100 · p = 1.3**       | **9.4×**  | 873 | 8,230 |
+| **A100 · p = 2.0**       | **0.9×**  | 325 | 301  |
+| **RTX 4090 · p = 1.0**   | **52.6×** | 76  | 4,021 |
+| **RTX 4090 · p = 1.3**   | **11.8×** | 350 | 4,141 |
+| **RTX 4090 · p = 2.0**   | **3.4×**  | 77  | 262  |
 ### Tensors must satisfy
 ``` python
 # Given tensors a,b,c and sizes M,N,K
@@ -71,6 +86,56 @@ c = y[10:40, 10:30]           # shape [30,20]
 
 c = kermac.cdist_t(a,b,out=c) # OK
 ```
+
+<!-- ### GH200
+```
+Running p-norm=1.0 with size (30000,1024) by (30000,1024)
+        kermac.cdist_t  82.073 ms
+        torch.cdist     2388.529 ms
+Running p-norm=1.3 with size (30000,1024) by (30000,1024)
+        kermac.cdist_t  453.440 ms
+        torch.cdist     4360.252 ms
+Running p-norm=2.0 with size (30000,1024) by (30000,1024)
+        kermac.cdist_t  78.744 ms
+        torch.cdist     405.845 ms
+```
+### H100 - PCIe
+```
+Running p-norm=1.0 with size (30000,1024) by (30000,1024)
+        kermac.cdist_t  107.582 ms
+        torch.cdist     2906.757 ms
+Running p-norm=1.3 with size (30000,1024) by (30000,1024)
+        kermac.cdist_t  592.267 ms
+        torch.cdist     5591.462 ms
+Running p-norm=2.0 with size (30000,1024) by (30000,1024)
+        kermac.cdist_t  103.502 ms
+        torch.cdist     346.187 ms
+```
+### A100
+A100s have low simt but high tensor core. p=2.0 uses tensor cores in that special case.
+```
+Running p-norm=1.0 with size (30000,1024) by (30000,1024)
+        kermac.cdist_t  250.978 ms
+        torch.cdist     3877.834 ms
+Running p-norm=1.3 with size (30000,1024) by (30000,1024)
+        kermac.cdist_t  872.534 ms
+        torch.cdist     8229.695 ms
+Running p-norm=2.0 with size (30000,1024) by (30000,1024)
+        kermac.cdist_t  325.448 ms
+        torch.cdist     301.412 ms
+```
+### RTX 4090
+```
+Running p-norm=1.0 with size (30000,1024) by (30000,1024)
+        kermac.cdist_t  76.474 ms
+        torch.cdist     4020.806 ms
+Running p-norm=1.3 with size (30000,1024) by (30000,1024)
+        kermac.cdist_t  350.319 ms
+        torch.cdist     4140.799 ms
+Running p-norm=2.0 with size (30000,1024) by (30000,1024)
+        kermac.cdist_t  77.172 ms
+        torch.cdist     261.975 ms
+``` -->
 
 <!-- ### Tensor Alignment
 ``` python
