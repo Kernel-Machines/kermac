@@ -4,6 +4,7 @@ import sys
 import importlib.resources
 from pathlib import Path
 from importlib.metadata import version, distributions
+import hashlib, os, uuid, json, pathlib, sys
 
 def get_package_name():
     return "kermac"
@@ -70,3 +71,29 @@ def get_include_dir_cuda() -> Path:
     if nvcc:
         return Path(nvcc).parent.parent / "include"
     raise RuntimeError("Cannot find CUDA include directory")
+
+def cache_root() -> pathlib.Path:
+    """
+    <user_cache_dir>/<your-package>/<env-id>/
+    Guaranteed unique per virtual-env *and* persistent across runs.
+    """
+    try:
+        # 1. A stable ID for THIS Python installation / venv
+        env_id = hashlib.sha256(sys.prefix.encode()).hexdigest()[:12]
+
+        # 2. RFC 6685 cache location that respects XDG / Windows / macOS rules
+        from platformdirs import user_cache_dir
+        base_dir = pathlib.Path(user_cache_dir(f'{get_package_name()}')) / f'{get_package_version()}'
+    
+
+        # 3. Create sub-dir and a sentinel file on first use
+        target = base_dir / env_id
+        target.mkdir(parents=True, exist_ok=True)
+
+        sentinel = target / "instance.json"
+        if not sentinel.exists():
+            sentinel.write_text(json.dumps({"uuid": str(uuid.uuid4())}))
+        return target
+    except Exception:               # Fallback: tmpdir
+        import tempfile
+        return pathlib.Path(tempfile.mkdtemp(prefix=f'{get_package_name()}-cache-'))

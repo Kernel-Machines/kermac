@@ -3,10 +3,12 @@ from typing import Dict, Any, Tuple
 import sys
 import gzip
 import io
+import torch
 
 from cuda.core.experimental import Device, Program, ProgramOptions, ObjectCode
 
 from .paths import *
+from .disk_cache import *
 
 class Singleton(type):
     """Metaclass for creating singleton classes."""
@@ -25,6 +27,12 @@ class DeviceModuleMap(metaclass=Singleton):
     def __init__(self):
         self._modules: Dict[Tuple[int, str], Any] = {}  # device_id -> module
         self._lock = threading.Lock()
+        self._db = DiskCache(
+            cache_dir=str(cache_root().resolve()),
+            max_size_mb=1024,
+            db_name='cubin_cache',
+        )
+        self._cuda_version = str(torch.version.cuda)
 
     def get_module(self, device: Device, function_name : str, storage_name : str, debug = False) -> Any:
         device_id = device.device_id
@@ -37,17 +45,26 @@ class DeviceModuleMap(metaclass=Singleton):
                 arch = "".join(f"{i}" for i in device.compute_capability)
                 package_name = get_package_name()
                 package_version = get_package_version()
-                cubin_path = get_cache_cubin_dir() / f'{package_name}.{package_version}.{arch}.{storage_name}.cubin'
+                
+                cubin_key = {
+                    'package_name':     package_name,
+                    'package_version':  package_version,
+                    'cuda_version':     self._cuda_version,
+                    'arch':             arch,
+                    'function_name':    function_name
+                }
                 if debug:
                     print(f'(Kermac Debug) Loaded module not found for (device:{device_id}, function:{function_name})')
-                    print(f'(Kermac Debug) For {cubin_path}')
-                if cubin_path.is_file():
+                result = self._db.lookup(cubin_key)
+                if result:
+                    lowered_symbol, cubin_code = result
+                    symbol_map = {function_name: lowered_symbol}
                     if debug:
-                        print(f'(Kermac Debug)\t\tFound pre-built cubin')
-                    module_cubin = ObjectCode.from_cubin(str(cubin_path))
+                        print(f'(Kermac Debug) Found pre-built cubin: {cubin_key}')
+                    module_cubin = ObjectCode.from_cubin(cubin_code, symbol_mapping=symbol_map)
                 else:
                     if debug:
-                        print(f'(Kermac Debug)\t\tNot found, building..')
+                        print(f'(Kermac Debug) No pre-built cubin, building: {cubin_key}')
                     module_cubin = Program(
                         '#include <kermac.cuh>',
                         code_type="c++", 
@@ -61,8 +78,8 @@ class DeviceModuleMap(metaclass=Singleton):
                                 diag_suppress=[64,1055],
 
                                 include_path=[
-                                    get_include_local_cuda_dir(),   # *.cuh
-                                    get_include_dir_cutlass(),      # main cutlass include
+                                    get_include_local_cuda_dir(),   # include/*.cuh
+                                    get_include_dir_cutlass(),      # thirdparty/cutlass/include
                                     get_include_dir_cuda()          # cuda toolkit for <cuda/src/assert>, etc.. (dependency of cutlass)
                                 ],
                             )
@@ -71,10 +88,15 @@ class DeviceModuleMap(metaclass=Singleton):
                         logs=sys.stdout,
                         name_expressions=[function_name]
                     )
-                    with open(cubin_path, 'wb') as file:
-                        file.write(module_cubin.code)
+                    self._db.store(
+                        cubin_key,
+                        (
+                            module_cubin._sym_map[function_name],
+                            module_cubin.code
+                        )
+                    )
                     if debug:
-                        print(f'(Kermac Debug)\t\tBuilt and saved')
+                        print(f'(Kermac Debug) Built and Saved: {cubin_key}')
                 self._modules[key] = module_cubin
                 return module_cubin
             else:

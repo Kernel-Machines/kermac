@@ -25,6 +25,8 @@ def cdist_t(
     skip_epilogue : bool = False,
     debug = False
 ):
+    # print(cache_root())
+    # exit()
     """
     Computes a cdist on transposed tensors with input validation.
     
@@ -117,7 +119,6 @@ def cdist_t(
     function_string = f'cute_norm_m128m128k8p3<NormType::{norm_type}>'
     storage_name = f'{base_name}.{norm_type}'
     module_cubin = device_module_map.get_module(device, function_string, storage_name, debug=debug)
-    print(module_cubin._sym_map)
     
     skip = '_skip_epilogue' if skip_epilogue else ''
 
