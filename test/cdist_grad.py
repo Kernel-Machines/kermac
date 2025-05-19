@@ -1,5 +1,7 @@
 import torch
 
+import kermac.cdist_grad
+
 size_M = 128 # M
 size_D = 32  # N
 size_C = 10  # O
@@ -10,7 +12,7 @@ tensor_B = torch.randn(size_D,size_N).cuda() # N-major # K-major
 tensor_C = torch.randn(size_C,size_N).cuda() # N-major # K-major
 tensor_D = torch.randn(size_D,size_M).cuda() # M-major # M-Major
 # result tensor of mine
-# tensor_E = torch.randn(size_C,size_D,size_M).cuda() # M-major # M-major # (O,N,M)
+tensor_E = torch.randn(size_C,size_D,size_M).cuda() # M-major # M-major # (O,N,M)
 
 # X-major is which dimension is stride=1
 coefs =         tensor_C
@@ -33,7 +35,15 @@ my_grad_input_output = torch.einsum('ok,km,nm->onm', tensor_C, tensor_A, tensor_
 # shuffle mine from 'onm' to 'omn' to match torch_grad_og
 assert torch.allclose(torch_grad_og, my_grad_input_output.permute(0,2,1))
 
+import kermac
 
+kermac.cdist_grad(
+    tensor_A,
+    tensor_B,
+    tensor_C,
+    tensor_D,
+    out = tensor_E
+)
 
 # if True:
 #     # want

@@ -5,23 +5,13 @@ import numpy as np
 
 from .paths import *
 from .module_cache import *
-
-def ceil_div(x, d):
-    return int((x + d - 1) // d)
-
-class PyTorchStreamWrapper:
-    def __init__(self, pt_stream):
-        self.pt_stream = pt_stream
-
-    def __cuda_stream__(self):
-        stream_id = self.pt_stream.cuda_stream
-        return (0, stream_id)  # Return format required by CUDA Python
+from .common import *
 
 def cdist_t(
-    a_t : torch.Tensor,
-    b_t : torch.Tensor,
+    a_t : torch.Tensor,             # [K,M] # M-major
+    b_t : torch.Tensor,             # [K,N] # N-major
+    out : torch.Tensor = None,      # [N,M] # M-major
     p : float = 2.0,
-    out : torch.Tensor = None,
     skip_epilogue : bool = False,
     debug = False
 ):
@@ -120,7 +110,6 @@ def cdist_t(
     if debug:
         print(f'(Kermac Debug) Launching kernel: {function_string}')
     kernel = module_cubin.get_kernel(function_string)
-
 
     p = np.float32(p) # convert to float32
 
