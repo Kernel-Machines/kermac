@@ -100,7 +100,8 @@ cuda_p_norm_m128n128k8p3(
 }
 
 template <
-    NormType norm_type
+    NormType norm_type,
+    bool skip_epilogue
 >
 __global__
 __launch_bounds__(256)
@@ -113,11 +114,11 @@ cute_norm_m128m128k8p3(
     float       *C, int ldC  // M,N m-major
 ) {
     if constexpr (norm_type == NormType::P) {
-        cuda_p_norm_m128n128k8p3<true, true, false, norm_type>(
+        cuda_p_norm_m128n128k8p3<true, true, skip_epilogue, norm_type>(
             p_power, m, n, k, A, ldA, B, ldB, C, ldC
         );
     } else {
-        cuda_p_norm_m128n128k8p3<true, true, false, norm_type>(
+        cuda_p_norm_m128n128k8p3<true, true, skip_epilogue, norm_type>(
             c_zero<f32>, m, n, k, A, ldA, B, ldB, C, ldC
         );
     }

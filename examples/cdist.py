@@ -47,6 +47,7 @@ def main():
             torch.randn(10,100,device=device), 
             torch.randn(10,100,device=device), 
             p=p,
+            skip_epilogue=skip_epilogue,
             debug=debug
         )
         torch.cdist(

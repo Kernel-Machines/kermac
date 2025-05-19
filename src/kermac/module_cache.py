@@ -10,6 +10,10 @@ from cuda.core.experimental import Device, Program, ProgramOptions, ObjectCode
 from .paths import *
 from .disk_cache import *
 
+def get_compute_capability(device : Device) -> str:
+    arch = "".join(f"{i}" for i in device.compute_capability)
+    return arch
+
 class Singleton(type):
     """Metaclass for creating singleton classes."""
     _instances = {}
@@ -34,37 +38,39 @@ class DeviceModuleMap(metaclass=Singleton):
         )
         self._cuda_version = str(torch.version.cuda)
 
-    def get_module(self, device: Device, function_name : str, storage_name : str, debug = False) -> Any:
+    def get_module(self, device: Device, function_name : str, debug = False) -> Any:
         device_id = device.device_id
         if device_id < 0:
             raise ValueError(f"Invalid device ID: {device_id}")
 
         key = (device_id, function_name)
         with self._lock:
-            if key not in self._modules:
-                arch = "".join(f"{i}" for i in device.compute_capability)
-                package_name = get_package_name()
-                package_version = get_package_version()
+            if key in self._modules:
+                if debug: 
+                    print(f'(Kermac Debug) Loaded module found for (device:{device_id}, function:{function_name})')
+            else:
+                if debug: 
+                    print(f'(Kermac Debug) Loaded module not found for (device:{device_id}, function:{function_name})')
                 
-                cubin_key = {
-                    'package_name':     package_name,
-                    'package_version':  package_version,
+                arch = get_compute_capability(device)
+                cubin_db_key = {
+                    'package_name':     get_package_name(),
+                    'package_version':  get_package_version(),
                     'cuda_version':     self._cuda_version,
                     'arch':             arch,
                     'function_name':    function_name
                 }
-                if debug:
-                    print(f'(Kermac Debug) Loaded module not found for (device:{device_id}, function:{function_name})')
-                result = self._db.lookup(cubin_key)
+    
+                result = self._db.lookup(cubin_db_key)
                 if result:
+                    if debug: 
+                        print(f'(Kermac Debug) Found pre-built cubin: {cubin_db_key}')
                     lowered_symbol, cubin_code = result
                     symbol_map = {function_name: lowered_symbol}
-                    if debug:
-                        print(f'(Kermac Debug) Found pre-built cubin: {cubin_key}')
                     module_cubin = ObjectCode.from_cubin(cubin_code, symbol_mapping=symbol_map)
                 else:
-                    if debug:
-                        print(f'(Kermac Debug) No pre-built cubin, building: {cubin_key}')
+                    if debug: 
+                        print(f'(Kermac Debug) No pre-built cubin, building: {cubin_db_key}')
                     module_cubin = Program(
                         '#include <kermac.cuh>',
                         code_type="c++", 
@@ -88,18 +94,11 @@ class DeviceModuleMap(metaclass=Singleton):
                         logs=sys.stdout,
                         name_expressions=[function_name]
                     )
-                    self._db.store(
-                        cubin_key,
-                        (
-                            module_cubin._sym_map[function_name],
-                            module_cubin.code
-                        )
-                    )
-                    if debug:
-                        print(f'(Kermac Debug) Built and Saved: {cubin_key}')
+                    cubin_sym_map_lowered_name = module_cubin._sym_map[function_name]
+                    cubin_db_value = (cubin_sym_map_lowered_name, module_cubin.code)
+                    self._db.store(cubin_db_key, cubin_db_value)
+                    if debug: 
+                        print(f'(Kermac Debug) Built and Saved: {cubin_db_key}')
                 self._modules[key] = module_cubin
                 return module_cubin
-            else:
-                if debug:
-                    print(f'(Kermac Debug) Loaded module found for (device:{device_id}, function:{function_name})')
             return self._modules[key]

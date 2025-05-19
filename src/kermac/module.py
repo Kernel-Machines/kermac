@@ -4,7 +4,7 @@ import torch
 import numpy as np
 
 from .paths import *
-from .cuda_jit_cache import *
+from .module_cache import *
 
 def ceil_div(x, d):
     return int((x + d - 1) // d)
@@ -25,8 +25,6 @@ def cdist_t(
     skip_epilogue : bool = False,
     debug = False
 ):
-    # print(cache_root())
-    # exit()
     """
     Computes a cdist on transposed tensors with input validation.
     
@@ -115,14 +113,10 @@ def cdist_t(
     else:
         norm_type = 'P'
 
-    base_name = 'p_norm'
-    function_string = f'cute_norm_m128m128k8p3<NormType::{norm_type}>'
-    storage_name = f'{base_name}.{norm_type}'
-    module_cubin = device_module_map.get_module(device, function_string, storage_name, debug=debug)
+    skip = 'true' if skip_epilogue else 'false'
+    function_string = f'cute_norm_m128m128k8p3<NormType::{norm_type},{skip}>'
+    module_cubin = device_module_map.get_module(device, function_string, debug=debug)
     
-    skip = '_skip_epilogue' if skip_epilogue else ''
-
-    # lowered_name = b'_Z22cute_norm_m128m128k8p3IL8NormType0EEvfiiiPKfiS2_iPfi'
     if debug:
         print(f'(Kermac Debug) Launching kernel: {function_string}')
     kernel = module_cubin.get_kernel(function_string)
@@ -157,51 +151,3 @@ def cdist_t(
     launch(stream, config, kernel, *kernel_args)
 
     return result
-
-def test(a):
-    pt_stream = torch.cuda.current_stream()
-    pt_device = pt_stream.device
-    pt_device_id = pt_device.index
-
-    device = Device(pt_device_id)
-    device.set_current()
-
-    arch = "".join(f"{i}" for i in device.compute_capability)
-    # code = r"""
-    #     #include <kermac.cuh>
-    # """
-
-    norm_type = 'L1'
-
-    function_string = f'cute_norm_m128m128k8p3<NormType::{norm_type}>'
-    
-    module_cubin = Program(
-        '#include <kermac.cuh>', 
-        code_type="c++", 
-        options= \
-            ProgramOptions(
-                std="c++17",
-                arch=f"sm_{arch}",
-                device_as_default_execution_space=True,
-                # diag_suppress cutlass: 64-D: declaration does not declare anything
-                # diag_suppress cutlass: 1055-D: declaration does not declare anything
-                diag_suppress=[64,1055], 
-
-                include_path=[
-                    get_include_local_cuda_dir(),   # *.cuh
-                    get_include_dir_cutlass(),      # main cutlass include
-                    get_include_dir_cuda()          # cuda toolkit for <cuda/src/assert>, etc.. (dependency of cutlass)
-                ],
-            )
-    ).compile(
-        "cubin", 
-        logs=sys.stdout,
-        name_expressions=[function_string]
-    )
-
-    print(module_cubin.code)
-
-    kernel = module_cubin.get_kernel(function_string)
-    print('here')
-
-
