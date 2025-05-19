@@ -110,7 +110,7 @@ Will print information related to the compilation of kernel functions and whethe
 $ python examples/cdist.py -d -p 1.3 
 
 (Kermac Debug) Warmup kermac.cdist_t
-(Kermac Debug) Using database at: /home/cpdurham/.cache/kermac/0.1.0/58751ff2aa22
+(Kermac Debug) Using database at: /home/$HOME/.cache/kermac/0.1.0/58751ff2aa22
 (Kermac Debug) Loaded module not found for (device:0, function:cute_norm_m128m128k8p3<NormType::P,false>)
 (Kermac Debug) No pre-built cubin, building: {'package_name': 'kermac', 'package_version': '0.1.0', 'cuda_version': '12.6', 'arch': '89', 'function_name': 'cute_norm_m128m128k8p3<NormType::P,false>'}
 (Kermac Debug) Built and Saved: {'package_name': 'kermac', 'package_version': '0.1.0', 'cuda_version': '12.6', 'arch': '89', 'function_name': 'cute_norm_m128m128k8p3<NormType::P,false>'}
@@ -123,7 +123,7 @@ $ python examples/cdist.py -d -p 1.3
 $ python examples/cdist.py -d -p 1.3
 
 (Kermac Debug) Warmup kermac.cdist_t
-(Kermac Debug) Using database at: /home/cpdurham/.cache/kermac/0.1.0/58751ff2aa22
+(Kermac Debug) Using database at: /home/$HOME/.cache/kermac/0.1.0/58751ff2aa22
 (Kermac Debug) Loaded module not found for (device:0, function:cute_norm_m128m128k8p3<NormType::P,false>)
 (Kermac Debug) Found pre-built cubin: {'package_name': 'kermac', 'package_version': '0.1.0', 'cuda_version': '12.6', 'arch': '89', 'function_name': 'cute_norm_m128m128k8p3<NormType::P,false>'}
 (Kermac Debug) Launching kernel: cute_norm_m128m128k8p3<NormType::P,false>
