@@ -39,7 +39,7 @@ print(c)
 ```
 
 ## Function: cdist_t
-A reimplementation of [`torch.cdist`](https://docs.pytorch.org/docs/stable/generated/torch.cdist.html). Computes fractional norms. Requires tensors to be transposed w.r.t. input tensors in `torch.cdist`. Does not support batches yet.
+A reimplementation of [**`torch.cdist`**](https://docs.pytorch.org/docs/stable/generated/torch.cdist.html). Computes fractional norms. Requires tensors to be transposed w.r.t. input tensors in `torch.cdist`. Does not support batches yet.
 
 Has special code paths for $p=1.0$ and $p=2.0$ to avoid fractional power instructions.
 ### `kermac.cdist_t` vs `torch.cdist`
@@ -94,7 +94,7 @@ c = y[10:40, 10:30]           # shape [30,20]
 c = kermac.cdist_t(a,b,out=c) # OK
 ```
 # Just-In-Time (JIT)
-This library just-in-time (JIT) compiles it's cuda kernels using Nvidia's [cuda-core](https://nvidia.github.io/cuda-python/cuda-core/latest/) package. The first run of a given configuration compiles the kernel and stores it in a cache. The next run for the same configuration should be fast. Using the debug flag like in:
+This library just-in-time (JIT) compiles it's cuda kernels using Nvidia's [**cuda-core**](https://nvidia.github.io/cuda-python/cuda-core/latest/) package. The first run of a given configuration compiles the kernel and stores it in a cache. The next run for the same configuration should be fast. Using the debug flag like in:
 ``` bash
 python cdist.py -p 1.0 -d
 ```
