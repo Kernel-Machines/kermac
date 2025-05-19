@@ -1,6 +1,7 @@
 #include <kermac_internal_common.cuh>
 #include <p_norm_impl.cuh>
 
+#if 0
 extern "C"
 __global__
 __launch_bounds__(256)
@@ -96,3 +97,4 @@ cute_p_norm_m128n128k8p3_skip_epilogue(
         p_power, m, n, k, A, ldA, B, ldB, C, ldC
     );
 }
+#endif

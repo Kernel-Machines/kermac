@@ -26,20 +26,20 @@ class DeviceModuleMap(metaclass=Singleton):
         self._modules: Dict[Tuple[int, str], Any] = {}  # device_id -> module
         self._lock = threading.Lock()
 
-    def get_module(self, device: Device, module_name : str, debug = False) -> Any:
+    def get_module(self, device: Device, function_name : str, storage_name : str, debug = False) -> Any:
         device_id = device.device_id
         if device_id < 0:
             raise ValueError(f"Invalid device ID: {device_id}")
 
-        key = (device_id, module_name)
+        key = (device_id, function_name)
         with self._lock:
             if key not in self._modules:
                 arch = "".join(f"{i}" for i in device.compute_capability)
                 package_name = get_package_name()
                 package_version = get_package_version()
-                cubin_path = get_cache_cubin_dir() / f'{package_name}.{package_version}.{arch}.{module_name}.cubin'
+                cubin_path = get_cache_cubin_dir() / f'{package_name}.{package_version}.{arch}.{storage_name}.cubin'
                 if debug:
-                    print(f'(Kermac Debug) Loaded module not found for (device:{device_id}, module:{module_name})')
+                    print(f'(Kermac Debug) Loaded module not found for (device:{device_id}, function:{function_name})')
                     print(f'(Kermac Debug) For {cubin_path}')
                 if cubin_path.is_file():
                     if debug:
@@ -48,38 +48,36 @@ class DeviceModuleMap(metaclass=Singleton):
                 else:
                     if debug:
                         print(f'(Kermac Debug)\t\tNot found, building..')
-                    cuda_code_path = get_local_cuda_src_dir() / f'{module_name}.cu'
-                    with open(cuda_code_path, "r", encoding="utf-8") as f:
-                        code = f.read()  # Read as text
-                        module_cubin = Program(
-                            code, 
-                            code_type="c++", 
-                            options= \
-                                ProgramOptions(
-                                    std="c++17",
-                                    arch=f"sm_{arch}",
-                                    device_as_default_execution_space=True,
-                                    # diag_suppress cutlass: 64-D: declaration does not declare anything
-                                    # diag_suppress cutlass: 1055-D: declaration does not declare anything
-                                    diag_suppress=[64,1055], 
+                    module_cubin = Program(
+                        '#include <kermac.cuh>',
+                        code_type="c++", 
+                        options= \
+                            ProgramOptions(
+                                std="c++17",
+                                arch=f"sm_{arch}",
+                                device_as_default_execution_space=True,
+                                # diag_suppress cutlass: 64-D: declaration does not declare anything
+                                # diag_suppress cutlass: 1055-D: declaration does not declare anything
+                                diag_suppress=[64,1055],
 
-                                    include_path=[
-                                        get_include_local_cuda_dir(),   # *.cuh
-                                        get_include_dir_cutlass(),      # main cutlass include
-                                        get_include_dir_cuda()          # cuda toolkit for <cuda/src/assert>, etc.. (dependency of cutlass)
-                                    ],
-                                )
-                        ).compile(
-                            "cubin", 
-                            logs=sys.stdout,
-                        )
-                        with open(cubin_path, 'wb') as file:
-                            file.write(module_cubin.code)
-                        if debug:
-                            print(f'(Kermac Debug)\t\tBuilt and saved')
+                                include_path=[
+                                    get_include_local_cuda_dir(),   # *.cuh
+                                    get_include_dir_cutlass(),      # main cutlass include
+                                    get_include_dir_cuda()          # cuda toolkit for <cuda/src/assert>, etc.. (dependency of cutlass)
+                                ],
+                            )
+                    ).compile(
+                        "cubin", 
+                        logs=sys.stdout,
+                        name_expressions=[function_name]
+                    )
+                    with open(cubin_path, 'wb') as file:
+                        file.write(module_cubin.code)
+                    if debug:
+                        print(f'(Kermac Debug)\t\tBuilt and saved')
                 self._modules[key] = module_cubin
                 return module_cubin
             else:
                 if debug:
-                    print(f'(Kermac Debug) Loaded module found for (device:{device_id}, module:{module_name})')
+                    print(f'(Kermac Debug) Loaded module found for (device:{device_id}, function:{function_name})')
             return self._modules[key]

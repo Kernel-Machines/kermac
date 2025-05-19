@@ -98,3 +98,27 @@ cuda_p_norm_m128n128k8p3(
         C, dC, sC, p_power
     );
 }
+
+template <
+    NormType norm_type
+>
+__global__
+__launch_bounds__(256)
+void
+cute_norm_m128m128k8p3(
+    float p_power,
+    int m, int n, int k,
+    float const *A, int ldA, // M,K m-major
+    float const *B, int ldB, // N,K n-major
+    float       *C, int ldC  // M,N m-major
+) {
+    if constexpr (norm_type == NormType::P) {
+        cuda_p_norm_m128n128k8p3<true, true, false, norm_type>(
+            p_power, m, n, k, A, ldA, B, ldB, C, ldC
+        );
+    } else {
+        cuda_p_norm_m128n128k8p3<true, true, false, norm_type>(
+            c_zero<f32>, m, n, k, A, ldA, B, ldB, C, ldC
+        );
+    }
+}
