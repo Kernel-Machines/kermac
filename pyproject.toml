@@ -9,7 +9,8 @@ authors         = [{name="Kernel Machines", email="kernel_machines@pm.me"}]
 dependencies    = [
   "numpy>=1.21",
   "platformdirs>=3.0",
-  "torch>=2.0"
+  "torch>=2.0",
+  "lmdb>=1.6.2"
 ]
 
 [project.optional-dependencies]
