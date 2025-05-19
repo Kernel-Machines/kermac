@@ -9,6 +9,8 @@ tensor_A = torch.randn(size_N,size_M).cuda() # M-major # M-major
 tensor_B = torch.randn(size_D,size_N).cuda() # N-major # K-major
 tensor_C = torch.randn(size_C,size_N).cuda() # N-major # K-major
 tensor_D = torch.randn(size_D,size_M).cuda() # M-major # M-Major
+# result tensor of mine
+# tensor_E = torch.randn(size_C,size_D,size_M).cuda() # M-major # M-major # (O,N,M)
 
 # X-major is which dimension is stride=1
 coefs =         tensor_C
@@ -28,6 +30,7 @@ assert torch.allclose(torch_grad_og, my_grad_input_only)
 # This is my implementation layout (input/output), contracts in 'k' majorness is on the right
 my_grad_input_output = torch.einsum('ok,km,nm->onm', tensor_C, tensor_A, tensor_D) - torch.einsum('ok,km,nk->onm', tensor_C, tensor_A, tensor_B)
 
+# shuffle mine from 'onm' to 'omn' to match torch_grad_og
 assert torch.allclose(torch_grad_og, my_grad_input_output.permute(0,2,1))
 
 
