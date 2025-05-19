@@ -95,7 +95,7 @@ def cdist_t(
 
     result = torch.zeros((N, M), dtype=torch.float32, device=a_t.device) if out is None else out
 
-    device_module_map = DeviceModuleMap()
+    device_module_map = DeviceModuleMap(debug)
 
     pt_stream = torch.cuda.current_stream()
     pt_device = pt_stream.device

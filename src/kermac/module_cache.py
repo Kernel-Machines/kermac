@@ -28,7 +28,7 @@ class Singleton(type):
 class DeviceModuleMap(metaclass=Singleton):
     """Singleton class mapping device IDs to lazily loaded modules."""
     
-    def __init__(self):
+    def __init__(self, debug = False):
         self._modules: Dict[Tuple[int, str], Any] = {}  # device_id -> module
         self._lock = threading.Lock()
         self._db = DiskCache(
@@ -37,6 +37,8 @@ class DeviceModuleMap(metaclass=Singleton):
             db_name='cubin_cache',
         )
         self._cuda_version = str(torch.version.cuda)
+        if debug:
+            print(f'(Kermac Debug) Using database at: {cache_root().resolve()}')
 
     def get_module(self, device: Device, function_name : str, debug = False) -> Any:
         device_id = device.device_id
