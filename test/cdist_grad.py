@@ -22,10 +22,10 @@ class CudaTimer:
     
 timer = CudaTimer()
 
-size_M = 30000 # M
-size_D = 128  # N
+size_M = 40000 # M
+size_D = 768  # N
 size_C = 10  # O
-size_N = 30000 # K (contraction dimension)
+size_N = 40000 # K (contraction dimension)
 
 tensor_A = torch.randn(size_N,size_M).cuda() # M-major # M-major 
 tensor_B = torch.randn(size_D,size_N).cuda() # N-major # K-major
@@ -40,22 +40,23 @@ kernel_matrix = tensor_A
 x =             tensor_B
 z =             tensor_D
 
-# This is known to be correct, contracts in 'i'
-# difference is that 'cmd' needs to be 'cdm' and 'z' and 'x' are transposed
-torch_grad_og = torch.einsum('li,ij,jd->ljd', coefs, kernel_matrix, z.T) - torch.einsum('li,ij,id->ljd', coefs, kernel_matrix, x.T)
+if False:
+    # This is known to be correct, contracts in 'i'
+    # difference is that 'cmd' needs to be 'cdm' and 'z' and 'x' are transposed
+    torch_grad_og = torch.einsum('li,ij,jd->ljd', coefs, kernel_matrix, z.T) - torch.einsum('li,ij,id->ljd', coefs, kernel_matrix, x.T)
 
-# This is my implementation layout (input), contracts in 'n', z and x are transposed
-my_grad_input_only = torch.einsum('cn,nm,dm->cmd', coefs, kernel_matrix, z) - torch.einsum('cn,nm,dn->cmd',coefs, kernel_matrix, x)
+    # This is my implementation layout (input), contracts in 'n', z and x are transposed
+    my_grad_input_only = torch.einsum('cn,nm,dm->cmd', coefs, kernel_matrix, z) - torch.einsum('cn,nm,dn->cmd',coefs, kernel_matrix, x)
 
-assert torch.allclose(torch_grad_og, my_grad_input_only)
+    assert torch.allclose(torch_grad_og, my_grad_input_only)
 
-timer.start()
-# This is my implementation layout (input/output), contracts in 'k' majorness is on the right
-my_grad_input_output = torch.einsum('ok,km,nm->onm', tensor_C, tensor_A, tensor_D) - torch.einsum('ok,km,nk->onm', tensor_C, tensor_A, tensor_B)
-print(f"\ttorch.einsum \t{timer.stop():.3f} ms")
+    timer.start()
+    # This is my implementation layout (input/output), contracts in 'k' majorness is on the right
+    my_grad_input_output = torch.einsum('ok,km,nm->onm', tensor_C, tensor_A, tensor_D) - torch.einsum('ok,km,nk->onm', tensor_C, tensor_A, tensor_B)
+    print(f"\ttorch.einsum \t{timer.stop():.3f} ms")
 
-# shuffle mine from 'onm' to 'omn' to match torch_grad_og
-assert torch.allclose(torch_grad_og, my_grad_input_output.permute(0,2,1))
+    # shuffle mine from 'onm' to 'omn' to match torch_grad_og
+    assert torch.allclose(torch_grad_og, my_grad_input_output.permute(0,2,1))
 
 
 timer.start()
@@ -68,12 +69,13 @@ kermac.cdist_grad(
     debug = True
 )
 print(f"\tkermac.cdist_grad \t{timer.stop():.3f} ms")
-# print(tensor_E)
-# print(my_grad_input_output)
-print(torch_grad_og.shape)
-print(tensor_E.permute(0,2,1).shape)
+if False:
+    # print(tensor_E)
+    # print(my_grad_input_output)
+    print(torch_grad_og.shape)
+    print(tensor_E.permute(0,2,1).shape)
 
-print(f'Maximum per element difference {torch.max(tensor_E - my_grad_input_output).item():.3e}')
+    print(f'Maximum per element difference {torch.max(tensor_E - my_grad_input_output).item():.3e}')
 # assert torch.allclose(torch_grad_og, tensor_E.permute(0,2,1), atol=1e-3)
 
 # if True:
