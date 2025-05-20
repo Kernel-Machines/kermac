@@ -8,21 +8,21 @@ from .module_cache import *
 from .common import *
 
 def cdist_t(
-    a : torch.Tensor,             # [K,M] # M-major
-    b : torch.Tensor,             # [K,N] # N-major
-    out : torch.Tensor = None,      # [N,M] # M-major
+    a : torch.Tensor,           # [K,M] # M-major
+    b : torch.Tensor,           # [K,N] # N-major
+    out : torch.Tensor = None,  # [N,M] # M-major
     p : float = 2.0,
     skip_epilogue : bool = False,
     debug = False
 ):
     """
-    Computes a cdist on transposed tensors with input validation.
+    Computes a cdist on transposed tensors with input validation with CUDA.
     
     Args:
-        a_t (torch.Tensor): Input tensor of shape (K, M), stride 1 in M, dtype float32, on CUDA.
-        b_t (torch.Tensor): Input tensor of shape (K, N), stride 1 in N, dtype float32, on CUDA.
-        p (float, optional=2.0): p value for the p-norm distance. 
+        a (torch.Tensor): Input tensor of shape (K, M), stride 1 in M, dtype float32, on CUDA.
+        b (torch.Tensor): Input tensor of shape (K, N), stride 1 in N, dtype float32, on CUDA.
         out (torch.Tensor, optional=None): Output tensor of shape (N, M), stride 1 in M, dtype float32, on CUDA.
+        p (float, optional=2.0): p value for the p-norm distance. 
         skip_epilogue (bool, optional=False): Avoid the final step of the result where we raise the result to the 1.0/p power.
     
     Returns:
@@ -32,6 +32,7 @@ def cdist_t(
         TypeError: If inputs are not PyTorch tensors or have incorrect dtype.
         ValueError: If shapes, strides, dimensions, or CUDA devices are invalid.
     """
+    
     # Check if inputs are tensors
     if not isinstance(a, torch.Tensor) or not isinstance(b, torch.Tensor):
         raise TypeError("a and b must be PyTorch tensors")

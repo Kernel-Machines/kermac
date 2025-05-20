@@ -8,14 +8,42 @@ from .module_cache import *
 from .common import *
 
 def cdist_grad(
-    a : torch.Tensor,           # [K,M] # M-major # [N,M] # kernel_matrix
-    b : torch.Tensor,           # [N,K] # K-major # [D,N] # x
-    c : torch.Tensor,           # [O,K] # K-major # [C,N] # coefs
-    d : torch.Tensor,           # [N,M] # M-major # [D,M] # z
-    out : torch.Tensor = None,  # [O,N,M] # M-major # [C,D,M] # grad
+    a : torch.Tensor,           # [K,M]     # M-major # [N,M]   # kernel_matrix
+    b : torch.Tensor,           # [N,K]     # K-major # [D,N]   # x
+    c : torch.Tensor,           # [O,K]     # K-major # [C,N]   # coefs
+    d : torch.Tensor,           # [N,M]     # M-major # [D,M]   # z
+    out : torch.Tensor = None,  # [O,N,M]   # M-major # [C,D,M] # grad
     p : float = 2.0,
+    skip_epilogue : bool = False,
     debug = False
 ):
+    """
+    Computes cdist_grad on transposed tensors with input validation with CUDA.
+
+    If in terms of AGOP.
+        a is `kernel_matrix`
+        b is `x`
+        c is `coefs`
+        d is `z`
+        out is `grad`
+    
+    Args:
+        a (torch.Tensor): Input tensor of shape (K, M), stride 1 in M, dtype float32, on CUDA.
+        b (torch.Tensor): Input tensor of shape (N, K), stride 1 in K, dtype float32, on CUDA.
+        c (torch.Tensor): Input tensor of shape (O, K), stride 1 in K, dtype float32, on CUDA.
+        d (torch.Tensor): Input tensor of shape (N, M), stride 1 in M, dtype float32, on CUDA.
+        out (torch.Tensor, optional=None): Output tensor of shape (O, N, M), stride 1 in M, dtype float32, on CUDA.
+        p (float, optional=2.0): p value for the p-norm distance. 
+        skip_epilogue (bool, optional=False): Avoid the final step of the result where we raise the result to the 1.0/p power.
+    
+    Returns:
+        torch.Tensor: Result tensor (placeholder implementation).
+    
+    Raises:
+        TypeError: If inputs are not PyTorch tensors or have incorrect dtype.
+        ValueError: If shapes, strides, dimensions, or CUDA devices are invalid.
+    """
+
     # Check if inputs are tensors
     if not all(isinstance(x, torch.Tensor) for x in (a, b, c, d)):
         raise TypeError("All inputs must be PyTorch tensors")
