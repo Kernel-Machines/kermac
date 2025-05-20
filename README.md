@@ -136,10 +136,6 @@ c = kermac.cdist_t(a,b,out=c) # OK
 ## Function: cdist_grad
 Computes the gradient of `cdist` in the style like:
 
-Aside from the `out` tensor in the `out=None` case **DOES NOT ALLOCATE**
-
-Computes:
-
 $out_{o,n,m} = \sum_{k=1}^{K} c_{o,k}a_{k,m}\mathrm{sgn}\left(d_{n,m}-b_{n,k}\right)\left|d_{n,m}-b_{n,k}\right|^{p-1}$
 
 Or expressed in c-style it efficiently computes:
@@ -156,6 +152,7 @@ for (int m = 0; m < M; m++) {
     }
 }
 ```
+Aside from the `out` tensor in the `out=None` case **DOES NOT ALLOCATE**
 It has special code paths for $p=1.0$ and $p=2.0$ to avoid fractional power instructions.
 
 It's supposed to be used like:
