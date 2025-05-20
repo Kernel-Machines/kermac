@@ -33,52 +33,52 @@ def parse_args():
     return parser.parse_args()
 
 def main():
-    with torch.no_grad():
-        args = parse_args()
-        M, N, K, p = args.M, args.N, args.K, args.p
-        skip_epilogue = args.skip_epilogue
-        debug = args.debug
+    args = parse_args()
+    M, N, K, p = args.M, args.N, args.K, args.p
+    skip_epilogue = args.skip_epilogue
+    debug = args.debug
 
-        device = torch.device('cuda')
-        timer = CudaTimer()
+    device = torch.device('cuda')
+    timer = CudaTimer()
 
-        if debug: 
-            print('\n(Kermac Debug) Warmup kermac.cdist_t')
-        kermac.cdist_t(
-            torch.randn(10,100,device=device), # a
-            torch.randn(10,100,device=device), # b
-            p=p,
-            skip_epilogue=skip_epilogue,
-            debug=debug
-        )
-        torch.cdist(
-            torch.randn(10,100,device=device), # a
-            torch.randn(10,100,device=device), # b
-            p=p
-        )
-        torch.cuda.synchronize()
+    if debug: 
+        print('\n(Kermac Debug) Warmup kermac.cdist_t')
+    kermac.cdist_t(
+        torch.randn(10,100,device=device), # a
+        torch.randn(10,100,device=device), # b
+        p=p,
+        skip_epilogue=skip_epilogue,
+        debug=debug
+    )
+    torch.cdist(
+        torch.randn(10,100,device=device), # a
+        torch.randn(10,100,device=device), # b
+        p=p
+    )
 
-        a = torch.randn(K,M,device=device)
-        b = torch.randn(K,N,device=device)
-        kermac_out = torch.zeros(N,M,device=device)
+    a = torch.randn(K,M,device=device)
+    b = torch.randn(K,N,device=device)
+    kermac_out = torch.zeros(N,M,device=device)
 
-        if debug: 
-            print('\n(Kermac Debug) Running kermac.cdist_t')
-        timer.start()
-        kermac_out = kermac.cdist_t(
-            a, b, 
-            p=p, out=kermac_out,
-            skip_epilogue=skip_epilogue,
-            debug=debug
-        )
-        if debug:
-            print('')
-        print(f'Running p-norm={p} with size ({M},{K}) by ({N},{K})')
-        print(f"\tkermac.cdist_t \t{timer.stop():.3f} ms")
+    torch.cuda.synchronize()
 
-        timer.start()
-        torch_out = torch.cdist(a.T, b.T, p=p).T
-        print(f"\ttorch.cdist \t{timer.stop():.3f} ms")
+    if debug: 
+        print('\n(Kermac Debug) Running kermac.cdist_t')
+    timer.start()
+    kermac_out = kermac.cdist_t(
+        a, b, 
+        p=p, out=kermac_out,
+        skip_epilogue=skip_epilogue,
+        debug=debug
+    )
+    if debug:
+        print('')
+    print(f'Running p-norm={p} with size ({M},{K}) by ({N},{K})')
+    print(f"\tkermac.cdist_t \t{timer.stop():.3f} ms")
+
+    timer.start()
+    torch_out = torch.cdist(a.T, b.T, p=p).T
+    print(f"\ttorch.cdist \t{timer.stop():.3f} ms")
 
     if not args.skip_numeric_compare:
         try:
@@ -89,14 +89,8 @@ def main():
 
             # Existing error checks with RMSE added
             abs_error = torch.abs(diff)
-            magnitude = torch.abs(torch_out)
-            magnitude.clamp_min_(1e-10) # In-place: set values < 1e-10 to 1e-10
-            rel_error = abs_error / magnitude
-
             max_abs_error = torch.max(abs_error).item()
             mean_abs_error = torch.mean(abs_error).item()
-            max_rel_error = torch.max(rel_error).item()
-            mean_rel_error = torch.mean(rel_error).item()
 #TODO: torch.allclose is super slow (maybe rewrite?)
             # is_close = torch.allclose(kermac_out, torch_out, rtol=1e-5, atol=1e-8)
 
@@ -104,12 +98,10 @@ def main():
             print(f"\tRoot Mean Squared Error:\t{rmse:.6e}")
             print(f"\tMax Absolute Error:\t\t{max_abs_error:.6e}")
             print(f"\tMean Absolute Error:\t\t{mean_abs_error:.6e}")
-            print(f"\tMax Relative Error:\t\t{max_rel_error:.6e}")
-            print(f"\tMean Relative Error:\t\t{mean_rel_error:.6e}")
             # print(f"\tTensors are close (within tolerance): {is_close}")
         except Exception as e:
             print(f'Exception: {e}')
-            print('You can use argument \'--skip_numeric_compare\' to skip comparison and avoid the slow allocation and eventual exception')
+            print('\nYou can use argument \'--skip_numeric_compare\' to skip comparison and avoid the slow allocation and eventual exception')
 
 
 if __name__ == '__main__':
