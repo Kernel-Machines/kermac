@@ -140,7 +140,10 @@ Aside from the `out` tensor in the `out=None` case **DOES NOT ALLOCATE**
 
 Computes:
 
-$`\operatorname{out}_{o,n,m}= \sum_{k=1}^{K} c_{o,k} a_{k,m} \operatorname{sgn}(d_{n,m}-b_{n,k}) \lvert d_{n,m}-b_{n,k}\rvert^{p-1}`$
+$ out_{o,n,m}
+  = \sum_{k=1}^{K} c_{o,k}\, a_{k,m}\,
+    \mathrm{sgn}\!\left(d_{n,m}-b_{n,k}\right)\,
+    \left|d_{n,m}-b_{n,k}\right|^{p-1} $
 
 Or expressed in c-style it efficiently computes:
 ``` c
