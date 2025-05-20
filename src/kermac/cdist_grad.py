@@ -138,7 +138,6 @@ def cdist_grad(
         print(f'(Kermac Debug) Launching kernel: {function_string}')
     kernel = module_cubin.get_kernel(function_string)
 
-    
     p = np.float32(p) # convert to float32
 
     bM = 128
@@ -157,8 +156,8 @@ def cdist_grad(
     ld_b = b.stride(0)
     ld_c = c.stride(0)
     ld_d = d.stride(0)
-    ld_e = result.stride(1)
-    ld_e_2 = result.stride(0)
+    ld_e_N = result.stride(1) 
+    ld_e_O = result.stride(0) # outer-most/slowest-moving/left-most stride
 
     kernel_args = (
         np.float32(p),
@@ -167,7 +166,7 @@ def cdist_grad(
         b.data_ptr(), ld_b,
         c.data_ptr(), ld_c,
         d.data_ptr(), ld_d,
-        result.data_ptr(), ld_e, ld_e_2
+        result.data_ptr(), ld_e_N, ld_e_O
     )
 
     launch(stream, config, kernel, *kernel_args)

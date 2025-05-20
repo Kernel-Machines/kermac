@@ -8,8 +8,8 @@ template<
     // bool align_4_N,
     bool predicate_reads,
     bool predicate_writes,
-    bool skip_epilogue,
     NormType norm_type,
+    bool skip_epilogue,
     class T
 >
 __device__
@@ -24,15 +24,19 @@ cuda_p_norm_m128n128k8p3(
 ) {
     using namespace cute;
 
-    auto M = int(m);
-    auto N = int(n);
-    auto K = int(k);
+    auto M = u64(m);
+    auto N = u64(n);
+    auto K = u64(k);
+
+    auto LDA = u64(ldA);
+    auto LDB = u64(ldB);
+    auto LDC = u64(ldC);
 
     auto prob_shape = make_shape(M,N,K);
 
-    auto dA = make_stride(Int<1>{}, ldA); // (dN, dK) : N-major
-    auto dB = make_stride(Int<1>{}, ldB); // (dM, dK) : M-major
-    auto dC = make_stride(Int<1>{}, ldC); // (dM, dN) : M-major
+    auto dA = make_stride(Int<1>{}, LDA); // (dN, dK) : N-major
+    auto dB = make_stride(Int<1>{}, LDB); // (dM, dK) : M-major
+    auto dC = make_stride(Int<1>{}, LDC); // (dM, dN) : M-major
 
     auto bM = Int<128>{};
     auto bN = Int<128>{};
@@ -114,11 +118,11 @@ cute_norm_m128m128k8p3(
     float       *C, int ldC  // M,N m-major
 ) {
     if constexpr (norm_type == NormType::P) {
-        cuda_p_norm_m128n128k8p3<true, true, skip_epilogue, norm_type>(
+        cuda_p_norm_m128n128k8p3<true, true, norm_type, skip_epilogue>(
             p_power, m, n, k, A, ldA, B, ldB, C, ldC
         );
     } else {
-        cuda_p_norm_m128n128k8p3<true, true, skip_epilogue, norm_type>(
+        cuda_p_norm_m128n128k8p3<true, true, norm_type, skip_epilogue>(
             c_zero<float>, m, n, k, A, ldA, B, ldB, C, ldC
         );
     }
