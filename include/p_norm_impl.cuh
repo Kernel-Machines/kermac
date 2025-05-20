@@ -119,7 +119,7 @@ cute_norm_m128m128k8p3(
         );
     } else {
         cuda_p_norm_m128n128k8p3<true, true, skip_epilogue, norm_type>(
-            c_zero<f32>, m, n, k, A, ldA, B, ldB, C, ldC
+            c_zero<float>, m, n, k, A, ldA, B, ldB, C, ldC
         );
     }
 }

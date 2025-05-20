@@ -42,8 +42,16 @@ kermac.cdist_grad(
     tensor_B,
     tensor_C,
     tensor_D,
-    out = tensor_E
+    out = tensor_E,
+    debug = True
 )
+# print(tensor_E)
+# print(my_grad_input_output)
+print(torch_grad_og.shape)
+print(tensor_E.permute(0,2,1).shape)
+
+print(torch.max(tensor_E - my_grad_input_output))
+assert torch.allclose(torch_grad_og, tensor_E.permute(0,2,1), atol=1e-4)
 
 # if True:
 #     # want

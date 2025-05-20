@@ -13,6 +13,7 @@ def cdist_grad(
     c : torch.Tensor,           # [O,K] # K-major # [C,N] # coefs
     d : torch.Tensor,           # [N,M] # M-major # [D,M] # z
     out : torch.Tensor = None,  # [O,N,M] # M-major # [C,D,M] # grad
+    p : float = 2.0,
     debug = False
 ):
     # Check if inputs are tensors
@@ -94,3 +95,45 @@ def cdist_grad(
 
     device.set_current()
     stream = PyTorchStreamWrapper(pt_stream)
+
+    function_string = f'cute_norm_kernel_gradient_m128n16o16k32p2<NormType::L2>'
+    module_cubin = device_module_map.get_module(device, function_string, debug=debug)
+
+    if debug:
+        print(f'(Kermac Debug) Launching kernel: {function_string}')
+    kernel = module_cubin.get_kernel(function_string)
+
+    p = np.float32(p) # convert to float32
+
+    bM = 128
+    bN = 16
+    bO = 16
+
+    block = 256
+    num_blocks_M = ceil_div(M, bM)
+    num_blocks_N = ceil_div(N, bN)
+    num_blocks_O = ceil_div(O, bO)
+
+    grid = (num_blocks_M, num_blocks_N, num_blocks_O)
+    config = LaunchConfig(grid=grid, block=block)
+
+    ld_a = a.stride(0)
+    ld_b = b.stride(0)
+    ld_c = c.stride(0)
+    ld_d = d.stride(0)
+    ld_e = result.stride(1)
+    ld_e_2 = result.stride(0)
+
+    kernel_args = (
+        np.float32(p),
+        M, N, O, K,
+        a.data_ptr(), ld_a,
+        b.data_ptr(), ld_b,
+        c.data_ptr(), ld_c,
+        d.data_ptr(), ld_d,
+        result.data_ptr(), ld_e, ld_e_2
+    )
+
+    launch(stream, config, kernel, *kernel_args)
+
+    return result

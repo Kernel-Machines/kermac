@@ -1,8 +1,7 @@
 #pragma once
 
-#include <cuda/std/type_traits>
-#include <cute/tensor.hpp>
 #include <kermac_internal_common.cuh>
+#include <cute/tensor.hpp>
 
 template <
 class SmemLayoutA,
@@ -101,7 +100,7 @@ kernel_cute_p_norm(
     Tensor sA = make_tensor(make_smem_ptr(smem_a), sA_layout);   // (BLK_M,BLK_K,PIPE)
     Tensor sB = make_tensor(make_smem_ptr(smem_b), sB_layout);   // (BLK_N,BLK_K,PIPE)
 
-#elif
+#else
     // Shared memory buffers
     extern __shared__ char shared_memory[];
     using SharedStorage = SharedStorageNorm<ASmemLayout, BSmemLayout, T>;
