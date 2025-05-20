@@ -22,17 +22,34 @@ class CudaTimer:
     
 timer = CudaTimer()
 
-size_M = 40000 # M
-size_D = 768  # N
-size_C = 10  # O
-size_N = 40000 # K (contraction dimension)
+device = torch.device('cuda')
+debug = True
+p = 2.0
 
-tensor_A = torch.randn(size_N,size_M).cuda() # M-major # M-major 
-tensor_B = torch.randn(size_D,size_N).cuda() # N-major # K-major
-tensor_C = torch.randn(size_C,size_N).cuda() # N-major # K-major
-tensor_D = torch.randn(size_D,size_M).cuda() # M-major # M-Major
+if debug: 
+    print('\n(Kermac Debug) Warmup kermac.cdist_grad')
+kermac.cdist_grad(
+    torch.randn(10,100,device=device),
+    torch.randn(32,10,device=device),
+    torch.randn(16,10,device=device),
+    torch.randn(32,100,device=device),
+    p = p,
+    debug = debug
+)
+
+size_M = 10000 # M
+size_D = 768  # N
+size_C = 16  # O
+size_N = 10000 # K (contraction dimension)
+
+
+
+tensor_A = torch.randn(size_N,size_M,device=device) # M-major # M-major 
+tensor_B = torch.randn(size_D,size_N,device=device) # N-major # K-major
+tensor_C = torch.randn(size_C,size_N,device=device) # N-major # K-major
+tensor_D = torch.randn(size_D,size_M,device=device) # M-major # M-Major
 # result tensor of mine
-tensor_E = torch.randn(size_C,size_D,size_M).cuda() # M-major # M-major # (O,N,M)
+tensor_E = torch.zeros(size_C,size_D,size_M,device=device) # M-major # M-major # (O,N,M)
 
 # X-major is which dimension is stride=1
 coefs =         tensor_C
@@ -40,7 +57,7 @@ kernel_matrix = tensor_A
 x =             tensor_B
 z =             tensor_D
 
-if False:
+if True:
     # This is known to be correct, contracts in 'i'
     # difference is that 'cmd' needs to be 'cdm' and 'z' and 'x' are transposed
     torch_grad_og = torch.einsum('li,ij,jd->ljd', coefs, kernel_matrix, z.T) - torch.einsum('li,ij,id->ljd', coefs, kernel_matrix, x.T)
@@ -66,10 +83,11 @@ kermac.cdist_grad(
     tensor_C,
     tensor_D,
     out = tensor_E,
-    debug = True
+    p = p,
+    debug = debug
 )
 print(f"\tkermac.cdist_grad \t{timer.stop():.3f} ms")
-if False:
+if True:
     # print(tensor_E)
     # print(my_grad_input_output)
     print(torch_grad_og.shape)

@@ -79,7 +79,7 @@ def cdist_grad(
     if out is not None and out.stride(2) != 1:
         raise ValueError("out must have stride 1 in last dimension")
     
-    result = torch.zeros((O, N, M), dtype=torch.float32, device=device) if out is None else out
+    result = torch.zeros((O, N, M), dtype=torch.float32, device=tensor_device) if out is None else out
 
     device_module_map = DeviceModuleMap(debug)
 
@@ -96,13 +96,21 @@ def cdist_grad(
     device.set_current()
     stream = PyTorchStreamWrapper(pt_stream)
 
-    function_string = f'cute_norm_kernel_gradient_m128n16o16k32p2<NormType::L2>'
+    if p == 1.0:
+        norm_type = 'L1'
+    elif p == 2.0:
+        norm_type = 'L2'
+    else:
+        norm_type = 'P'
+        
+    function_string = f'cute_norm_kernel_gradient_m128n16o16k32p2<NormType::{norm_type}>'
     module_cubin = device_module_map.get_module(device, function_string, debug=debug)
 
     if debug:
         print(f'(Kermac Debug) Launching kernel: {function_string}')
     kernel = module_cubin.get_kernel(function_string)
 
+    
     p = np.float32(p) # convert to float32
 
     bM = 128

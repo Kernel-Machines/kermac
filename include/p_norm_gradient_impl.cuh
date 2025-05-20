@@ -26,18 +26,25 @@ cute_p_norm_kernel_gradient_m128n16o16k32p2(
 ) {
     using namespace cute;
 
-    auto M = int(m);
-    auto N = int(n);
-    auto O = int(o);
-    auto K = int(k);
+    auto M = u64(m);
+    auto N = u64(n);
+    auto O = u64(o);
+    auto K = u64(k);
+
+    auto LDA = u64(ldA);
+    auto LDB = u64(ldB);
+    auto LDC = u64(ldC);
+    auto LDD = u64(ldD);
+    auto LDE = u64(ldE);
+    auto LDE_2 = u64(ldE_2);
 
     auto prob_shape = make_shape(M,N,O,K);
 
-    auto dA = make_stride(Int<1>{}, ldA); // (dM, dK) : M-major
-    auto dB = make_stride(ldB, Int<1>{}); // (dN, dK) : K-major
-    auto dC = make_stride(ldC, Int<1>{}); // (dO, dK) : K-major
-    auto dD = make_stride(Int<1>{}, ldD); // (dM, dN) : M-major
-    auto dE = make_stride(Int<1>{}, ldE, ldE_2); // (dM, dN, dO) : M-major
+    auto dA = make_stride(Int<1>{}, LDA); // (dM, dK) : M-major
+    auto dB = make_stride(LDB, Int<1>{}); // (dN, dK) : K-major
+    auto dC = make_stride(LDC, Int<1>{}); // (dO, dK) : K-major
+    auto dD = make_stride(Int<1>{}, LDD); // (dM, dN) : M-major
+    auto dE = make_stride(Int<1>{}, LDE, LDE_2); // (dM, dN, dO) : M-major
 
     auto bM = Int<128>{};
     auto bN = Int<16>{};
