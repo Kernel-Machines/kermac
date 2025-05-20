@@ -121,16 +121,13 @@ def cdist_t(
 
     bM = 128
     bN = 128
-    bK = 8
-    bP = 3
-    shmem_size = (bM * bK * bP + bN * bK * bP) * 4
 
     block = 256
     num_blocks_M = ceil_div(M, bM)
     num_blocks_N = ceil_div(N, bN)
 
     grid = (num_blocks_M, num_blocks_N, 1)
-    config = LaunchConfig(grid=grid, block=block, shmem_size=shmem_size)
+    config = LaunchConfig(grid=grid, block=block)
     ld_a = a.stride(0)
     ld_b = b.stride(0)
     ld_c = result.stride(0)

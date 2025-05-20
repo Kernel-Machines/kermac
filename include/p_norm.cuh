@@ -95,12 +95,20 @@ kernel_cute_p_norm(
         gB = cute::domain_offset(make_coord(0, k_residue, 0), gB);
     }
 
+#if 1
+    alignas(16) __shared__ T smem_a[cosize_v<ASmemLayout>];
+    alignas(16) __shared__ T smem_b[cosize_v<BSmemLayout>];
+    Tensor sA = make_tensor(make_smem_ptr(smem_a), sA_layout);   // (BLK_M,BLK_K,PIPE)
+    Tensor sB = make_tensor(make_smem_ptr(smem_b), sB_layout);   // (BLK_N,BLK_K,PIPE)
+
+#elif
     // Shared memory buffers
     extern __shared__ char shared_memory[];
     using SharedStorage = SharedStorageNorm<ASmemLayout, BSmemLayout, T>;
     SharedStorage& smem = *reinterpret_cast<SharedStorage*>(shared_memory);
     Tensor sA = make_tensor(make_smem_ptr(smem.A.begin()), sA_layout);   // (BLK_M,BLK_K,PIPE)
     Tensor sB = make_tensor(make_smem_ptr(smem.B.begin()), sB_layout);   // (BLK_N,BLK_K,PIPE)
+#endif
 
     // Tiled copy setups
     ThrCopy thr_copy_a = copy_a.get_slice(threadIdx.x);
