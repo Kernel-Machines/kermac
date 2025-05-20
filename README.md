@@ -37,6 +37,24 @@ c = kermac.cdist_t(a,b)         # this will return a tensor with 100 rows and 20
 print(c)
 ```
 
+### Examples
+To run `kermac.cdist_c`:
+``` bash
+wget https://raw.githubusercontent.com/Kernel-Machines/kermac/refs/heads/master/examples/cdist.py
+python cdist.py -d -p 1.0
+```
+To run `kermac.cdist_grad`:
+``` bash
+wget https://raw.githubusercontent.com/Kernel-Machines/kermac/refs/heads/master/examples/cdist_grad.py
+python cdist_grad.py -d -p 2.0
+# For some reason running the script a second time after compiling kernel is much faster
+python cdist_grad.py -d -p 2.0
+```
+To wipe out the compiled cubin cache you can do:
+``` bash
+rm -rf ~/.cache/kermac
+```
+
 ## Function: cdist_t
 A reimplementation of [**`torch.cdist`**](https://docs.pytorch.org/docs/stable/generated/torch.cdist.html). Computes fractional norms. Requires tensors to be transposed w.r.t. input tensors in `torch.cdist`. Does not support batches yet. Aside from the `out` tensor in the `out=None` case **DOES NOT ALLOCATE**
 

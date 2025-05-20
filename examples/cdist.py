@@ -43,20 +43,21 @@ def main():
 
     if debug: 
         print('\n(Kermac Debug) Warmup kermac.cdist_t')
-    for _ in range(2):
-        kermac.cdist_t(
-            torch.randn(10,100,device=device), # a
-            torch.randn(10,100,device=device), # b
-            p=p,
-            skip_epilogue=skip_epilogue,
-            debug=debug
-        )
-        torch.cdist(
-            torch.randn(10,100,device=device), # a
-            torch.randn(10,100,device=device), # b
-            p=p
-        )
-        
+    kermac.cdist_t(
+        torch.randn(10,100,device=device), # a
+        torch.randn(10,100,device=device), # b
+        p=p,
+        skip_epilogue=skip_epilogue,
+        debug=debug
+    )
+    torch.cdist(
+        torch.randn(10,100,device=device), # a
+        torch.randn(10,100,device=device), # b
+        p=p
+    )
+
+    torch.cuda.synchronize()
+
     a = torch.randn(K,M,device=device)
     b = torch.randn(K,N,device=device)
     kermac_out = torch.zeros(N,M,device=device)
