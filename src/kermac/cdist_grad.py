@@ -31,13 +31,11 @@ def cdist_grad(
     // a[K,M], b[N,K], c[O,K], d[N,M], out[O,N,M]
     for (int m = 0; m < M; m++) {
         for (int n = 0; n < N; n++) {
-            for (int k = 0; k < K; k++) {
-                float diff = d[n,m] - b[n,k];
-                float sign = signum(diff);
-                float v = pow(abs(diff), p - 1.0)) * sign;
-                v = a[k,m] * v;
-                for (int o = 0; o < O; o++) {
-                    out[o,n,m] += c[o,k] * v;
+            for (int o = 0; o < O; o++) {
+                for (int k = 0; k < K; k++) {
+                    float diff = d[n,m] - b[n,k];
+                    float sign = signum(diff);
+                    out[o,n,m] += c[o,k] * a[k,m] * sign * pow(abs(diff), p - 1.0));
                 }
             }
         }

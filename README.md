@@ -129,15 +129,10 @@ Or expressed in c-style it efficiently computes:
 // a[K,M], b[N,K], c[O,K], d[N,M], out[O,N,M]
 for (int m = 0; m < M; m++) {
     for (int n = 0; n < N; n++) {
-        for (int k = 0; k < K; k++) {
-            float diff = d[n,m] - b[n,k];
-            float sign = signum(diff);
-            // pow for fractional 'p' is very expensive
-            float v = pow(abs(diff), p - 1.0)) * sign;
-            v = a[k,m] * v;
-            for (int o = 0; o < O; o++) {
-                // By scaling here, we reuse 'v' for each 'O'
-                out[o,n,m] += c[o,k] * v;
+        for (int o = 0; o < O; o++) {
+            for (int k = 0; k < K; k++) {
+                float diff = d[n,m] - b[n,k];
+                out[o,n,m] += c[o,k] * a[k,m] * signum(diff) * pow(abs(diff), p - 1.0));
             }
         }
     }
