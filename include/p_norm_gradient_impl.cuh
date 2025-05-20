@@ -125,44 +125,6 @@ cute_p_norm_kernel_gradient_m128n16o16k32p2(
         E, dE, sE,
         p_power
     );
-
-#if 0
-    if (p_power == 1.0f) {
-        printf("Launching L1 Norm Kernel Gradient\n");
-        kernel_cute_p_norm_kernel_gradient<true, true, NormType::L1><<<dimGrid, dimBlock, smem_size, stream>>>(
-            prob_shape, cta_tiler, thread_tiler,
-            A, dA, sA, copyA,
-            B, dB, sB, copyB,
-            C, dC, sC, copyC,
-            D, dD, sD,
-            E, dE, sE,
-            p_power
-        );
-    } else if (p_power == 2.0f) {
-        printf("Launching L2 Norm Kernel Gradient\n");
-        kernel_cute_p_norm_kernel_gradient<true, true, NormType::L2><<<dimGrid, dimBlock, smem_size, stream>>>(
-            prob_shape, cta_tiler, thread_tiler,
-            A, dA, sA, copyA,
-            B, dB, sB, copyB,
-            C, dC, sC, copyC,
-            D, dD, sD,
-            E, dE, sE,
-            p_power
-        );
-    } else {
-        T p_power_grad = p_power-c_one<T>;
-        printf("Launching Norm-P=%0.3f Kernel Gradient, subtracting one for gradient: %0.3f\n", p_power, p_power_grad);
-        kernel_cute_p_norm_kernel_gradient<true, true, NormType::P><<<dimGrid, dimBlock, smem_size, stream>>>(
-            prob_shape, cta_tiler, thread_tiler,
-            A, dA, sA, copyA,
-            B, dB, sB, copyB,
-            C, dC, sC, copyC,
-            D, dD, sD,
-            E, dE, sE,
-            p_power_grad
-        );
-    }
-#endif
 }
 
 template <

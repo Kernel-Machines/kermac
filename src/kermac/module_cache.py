@@ -1,8 +1,6 @@
 import threading
 from typing import Dict, Any, Tuple
 import sys
-import gzip
-import io
 import torch
 
 from cuda.core.experimental import Device, Program, ProgramOptions, ObjectCode

@@ -1,10 +1,12 @@
 from platformdirs import user_cache_dir
-import os
 import sys
-import importlib.resources
+from importlib.resources import files
 from pathlib import Path
-from importlib.metadata import version, distributions
-import hashlib, os, uuid, json, pathlib, sys
+from importlib.metadata import version
+import hashlib 
+import uuid
+import json
+import tempfile
 
 def get_package_name():
     return "kermac"
@@ -16,33 +18,9 @@ def get_package_version():
     except Exception as e:
         return f"Could not determine version: {e}"
 
-def get_cache_ptx_dir() -> Path:
-    # Get the user-specific cache directory for your package
-    cache_dir = user_cache_dir(get_package_name())
-    
-    # Create a subdirectory for PTX files
-    ptx_cache_dir = os.path.join(cache_dir, "ptx")
-    
-    # Create the directory if it doesn't exist
-    os.makedirs(ptx_cache_dir, exist_ok=True)
-    
-    return Path(ptx_cache_dir)
-
-def get_cache_cubin_dir() -> Path:
-    # Get the user-specific cache directory for your package
-    cache_dir = user_cache_dir(get_package_name())
-    
-    # Create a subdirectory for CUBIN files
-    cubin_cache_dir = os.path.join(cache_dir, "cubin")
-    
-    # Create the directory if it doesn't exist
-    os.makedirs(cubin_cache_dir, exist_ok=True)
-    
-    return Path(cubin_cache_dir)
-
-def get_top_level_repo_dir(dir) -> Path:
+def _get_top_level_repo_dir(dir) -> Path:
     # directory *beside* the package (wheel layout)
-    wheel_copy = importlib.resources.files(get_package_name()).parent / dir
+    wheel_copy = files(get_package_name()).parent / dir
     # directory *beside* src/ (editable / repo checkout)
     repo_copy  = Path(__file__).resolve().parents[2] / dir
 
@@ -52,14 +30,11 @@ def get_top_level_repo_dir(dir) -> Path:
 
     raise FileNotFoundError("thirdparty directory not found")
 
-def get_local_cuda_src_dir() -> Path:
-    return get_top_level_repo_dir('csrc')
-
 def get_include_local_cuda_dir() -> Path:
-    return get_top_level_repo_dir('include')
+    return _get_top_level_repo_dir('include')
 
 def get_include_dir_cutlass() -> Path:
-    return get_top_level_repo_dir('thirdparty') / 'cutlass/include'
+    return _get_top_level_repo_dir('thirdparty') / 'cutlass/include'
 
 def get_include_dir_cuda() -> Path:
     """Best-effort guess of the Toolkit’s <cuda>/include directory."""
@@ -72,7 +47,7 @@ def get_include_dir_cuda() -> Path:
         return Path(nvcc).parent.parent / "include"
     raise RuntimeError("Cannot find CUDA include directory")
 
-def cache_root() -> pathlib.Path:
+def cache_root() -> Path:
     """
     <user_cache_dir>/<your-package>/<env-id>/
     Guaranteed unique per virtual-env *and* persistent across runs.
@@ -82,8 +57,7 @@ def cache_root() -> pathlib.Path:
         env_id = hashlib.sha256(sys.prefix.encode()).hexdigest()[:12]
 
         # 2. RFC 6685 cache location that respects XDG / Windows / macOS rules
-        from platformdirs import user_cache_dir
-        base_dir = pathlib.Path(user_cache_dir(f'{get_package_name()}')) / f'{get_package_version()}'
+        base_dir = Path(user_cache_dir(f'{get_package_name()}')) / f'{get_package_version()}'
     
 
         # 3. Create sub-dir and a sentinel file on first use
@@ -95,5 +69,4 @@ def cache_root() -> pathlib.Path:
             sentinel.write_text(json.dumps({"uuid": str(uuid.uuid4())}))
         return target
     except Exception:               # Fallback: tmpdir
-        import tempfile
-        return pathlib.Path(tempfile.mkdtemp(prefix=f'{get_package_name()}-cache-'))
+        return Path(tempfile.mkdtemp(prefix=f'{get_package_name()}-cache-'))
