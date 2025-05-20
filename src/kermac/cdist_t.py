@@ -17,6 +17,20 @@ def cdist_t(
 ):
     """
     Computes a cdist on transposed tensors with input validation with CUDA.
+
+    Computes (efficiently):
+    ``` c
+    for (int m = 0; m < M; m++) {
+        for (int n = 0; n < N; n++) {
+            for (int k = 0; k < K; k++) {
+                out[n,m] += pow(abs(b[k,n] - a[k,m]), p);
+            }
+            if (!skip_epilogue) {
+                out[n,m] = pow(out[n,m], 1.0/p);
+            }
+        }
+    }
+    ```
     
     Args:
         a (torch.Tensor): Input tensor of shape (K, M), stride 1 in M, dtype float32, on CUDA.

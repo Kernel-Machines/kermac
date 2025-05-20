@@ -22,7 +22,7 @@ cute_p_norm_kernel_gradient_m128n16o16k32p2(
     T const *B, int ldB,        // data_N          N,D     k,n
     T const *C, int ldC,        // solution        N,C     k,o
     T const *D, int ldD,        // data_M          M,D     m,n
-    T *E, int ldE, int ldE_2   // grad            M,D,C   m,n,o
+    T *E, int ldE_N, int ldE_O  // grad            M,D,C   m,n,o
 ) {
     using namespace cute;
 
@@ -35,8 +35,8 @@ cute_p_norm_kernel_gradient_m128n16o16k32p2(
     auto LDB = u64(ldB);
     auto LDC = u64(ldC);
     auto LDD = u64(ldD);
-    auto LDE = u64(ldE);
-    auto LDE_2 = u64(ldE_2);
+    auto LDE_N = u64(ldE_N);
+    auto LDE_O = u64(ldE_O);
 
     auto prob_shape = make_shape(M,N,O,K);
 
@@ -44,7 +44,7 @@ cute_p_norm_kernel_gradient_m128n16o16k32p2(
     auto dB = make_stride(LDB, Int<1>{}); // (dN, dK) : K-major
     auto dC = make_stride(LDC, Int<1>{}); // (dO, dK) : K-major
     auto dD = make_stride(Int<1>{}, LDD); // (dM, dN) : M-major
-    auto dE = make_stride(Int<1>{}, LDE, LDE_2); // (dM, dN, dO) : M-major
+    auto dE = make_stride(Int<1>{}, LDE_N, LDE_O); // (dM, dN, dO) : M-major
 
     auto bM = Int<128>{};
     auto bN = Int<16>{};
@@ -100,18 +100,8 @@ cute_p_norm_kernel_gradient_m128n16o16k32p2(
                 T
             >
         ));
-
-    dim3 dimBlock(size(thread_tiler));
-    dim3 dimGrid(
-        size(ceil_div(M, bM)),
-        size(ceil_div(N, bN)),
-        size(ceil_div(O, bO))
-    );
 #endif
 
-#if 0
-    printf("smem_size: %d\n", smem_size);
-#endif
     kernel_cute_p_norm_kernel_gradient<
         predicate_reads, 
         predicate_writes,
@@ -143,7 +133,7 @@ cute_norm_kernel_gradient_m128n16o16k32p2(
     float const *B, int ldB,        // data_N          N,D     k,n
     float const *C, int ldC,        // solution        N,C     k,o
     float const *D, int ldD,        // data_M          M,D     m,n
-    float *E, int ldE, int ldE_2
+    float *E, int ldE_N, int ldE_O
 ) {
     if constexpr (norm_type == NormType::L1) {
         cute_p_norm_kernel_gradient_m128n16o16k32p2<true, true, NormType::L1>(
@@ -153,7 +143,7 @@ cute_norm_kernel_gradient_m128n16o16k32p2(
             B, ldB,
             C, ldC,
             D, ldD,
-            E, ldE, ldE_2
+            E, ldE_N, ldE_O
         );
     } else if constexpr (norm_type == NormType::L2) {
         cute_p_norm_kernel_gradient_m128n16o16k32p2<true, true, NormType::L2>(
@@ -163,7 +153,7 @@ cute_norm_kernel_gradient_m128n16o16k32p2(
             B, ldB,
             C, ldC,
             D, ldD,
-            E, ldE, ldE_2
+            E, ldE_N, ldE_O
         );
     } else {
         float p_power_grad = p_power-c_one<float>;
@@ -174,7 +164,7 @@ cute_norm_kernel_gradient_m128n16o16k32p2(
             B, ldB,
             C, ldC,
             D, ldD,
-            E, ldE, ldE_2
+            E, ldE_N, ldE_O
         );
     }
 }

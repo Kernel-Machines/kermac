@@ -2,7 +2,6 @@
 # kermac
 **Pytorch** routines for (**Ker**)nel (**Mac**)hines
 
-
 ## These routines are very fast
 
 However they only support **sm_80** or higher **Nvidia** cards. This includes:
@@ -39,9 +38,32 @@ print(c)
 ```
 
 ## Function: cdist_t
-A reimplementation of [**`torch.cdist`**](https://docs.pytorch.org/docs/stable/generated/torch.cdist.html). Computes fractional norms. Requires tensors to be transposed w.r.t. input tensors in `torch.cdist`. Does not support batches yet.
+A reimplementation of [**`torch.cdist`**](https://docs.pytorch.org/docs/stable/generated/torch.cdist.html). Computes fractional norms. Requires tensors to be transposed w.r.t. input tensors in `torch.cdist`. Does not support batches yet. Aside from the `out` tensor in the `out=None` case **DOES NOT ALLOCATE**
 
-Has special code paths for $p=1.0$ and $p=2.0$ to avoid fractional power instructions.
+Computes:
+
+$out_{n,m} = \left( \sum_{k=1}^{K} |b_{k,n} - a_{k,m}|^p \right)^{\frac{1}{p}}$
+
+If instead `skip_epilogue` is set it computes:
+
+$out_{n,m} = \sum_{k=1}^{K} |b_{k,n} - a_{k,m}|^p$
+
+Or expressed in **c-style** it efficiently computes:
+``` c
+// a[K,M], b[K,N], out[N,M]
+for (int m = 0; m < M; m++) {
+    for (int n = 0; n < N; n++) {
+        for (int k = 0; k < K; k++) {
+            out[n,m] += pow(abs(b[k,n] - a[k,m]), p);
+        }
+        if (!skip_epilogue) {
+            out[n,m] = pow(out[n,m], 1.0/p);
+        }
+    }
+}
+```
+
+It has special code paths for $p=1.0$ and $p=2.0$ to avoid fractional power instructions.
 ### `kermac.cdist_t` vs `torch.cdist`
 with problem size $[M,N,K]$ = $[30000,30000,1024]$
 
@@ -93,8 +115,67 @@ c = y[10:40, 10:30]           # shape [30,20]
 
 c = kermac.cdist_t(a,b,out=c) # OK
 ```
+## Function: cdist_grad
+Computes the gradient of `cdist` in the style like:
+
+Aside from the `out` tensor in the `out=None` case **DOES NOT ALLOCATE**
+
+Computes:
+
+$\text{out}_{o,n,m} = \sum_{k=1}^{K} c_{o,k} \cdot a_{k,m} \cdot \text{sgn}(d_{n,m} - b_{n,k}) \cdot \left| d_{n,m} - b_{n,k} \right|^{p-1}$
+
+Or expressed in c-style it efficiently computes:
+``` c
+// a[K,M], b[N,K], c[O,K], d[N,M], out[O,N,M]
+for (int m = 0; m < M; m++) {
+    for (int n = 0; n < N; n++) {
+        for (int k = 0; k < K; k++) {
+            float diff = d[n,m] - b[n,k];
+            float sign = signum(diff);
+            // pow for fractional 'p' is very expensive
+            float v = pow(abs(diff), p - 1.0)) * sign;
+            v = a[k,m] * v;
+            for (int o = 0; o < O; o++) {
+                // By scaling here, we reuse 'v' for each 'O'
+                out[o,n,m] += c[o,k] * v;
+            }
+        }
+    }
+}
+```
+It has special code paths for $p=1.0$ and $p=2.0$ to avoid fractional power instructions.
+
+It's supposed to be used like:
+* $a_{k,m}$ is `kernel_matrix`
+* $b_{n,k}$ is `data_x`
+* $c_{o,k}$ is `coefficients`
+* $d_{n,m}$ is `data_z`
+* $out_{o,n,k}$ is `gradient`
+
+### Tensors must satisfy
+``` python
+# Given tensors a,b,c,d,out and sizes M,N,O,K
+# K is the contracted mode
+assert a.shape == torch.Size([K,M])
+assert b.shape == torch.Size([N,K])
+assert c.shape == torch.Size([O,K])
+assert d.shape == torch.Size([N,M])
+assert out.shape == torch.Size([O,N,M])
+
+assert a.stride(1) == 1
+assert b.stride(1) == 1
+assert c.stride(1) == 1
+assert d.stride(1) == 1
+assert out.stride(1) == 1
+
+out = kermac.cdist_grad(a,b,c,d,out=out) # OK
+```
+
+### Views are OK
+As explained with `cdist_t`.
+
 # Just-In-Time (JIT)
-This library just-in-time (JIT) compiles it's cuda kernels using Nvidia's [**cuda-core**](https://nvidia.github.io/cuda-python/cuda-core/latest/) package. The first run of a given configuration compiles the kernel and stores it in a cache. The next run for the same configuration should be fast. Using the debug flag like in:
+This library just-in-time (JIT) compiles it's cuda kernels using Nvidia's [**cuda-core**](https://nvidia.github.io/cuda-python/cuda-core/latest/) package. The first run of a given configuration compiles the kernel and stores it in a cache database on disk. The next run for the same configuration should be fast. Using the debug flag like in:
 ``` bash
 python cdist.py -p 1.0 -d
 ```

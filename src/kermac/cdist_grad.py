@@ -14,7 +14,6 @@ def cdist_grad(
     d : torch.Tensor,           # [N,M]     # M-major # [D,M]   # z
     out : torch.Tensor = None,  # [O,N,M]   # M-major # [C,D,M] # grad
     p : float = 2.0,
-    skip_epilogue : bool = False,
     debug = False
 ):
     """
@@ -26,6 +25,24 @@ def cdist_grad(
         c is `coefs`
         d is `z`
         out is `grad`
+
+    Computes (efficiently):
+    ``` c
+    // a[K,M], b[N,K], c[O,K], d[N,M], out[O,N,M]
+    for (int m = 0; m < M; m++) {
+        for (int n = 0; n < N; n++) {
+            for (int k = 0; k < K; k++) {
+                float diff = d[n,m] - b[n,k];
+                float sign = signum(diff);
+                float v = pow(abs(diff), p - 1.0)) * sign;
+                v = a[k,m] * v;
+                for (int o = 0; o < O; o++) {
+                    out[o,n,m] += c[o,k] * v;
+                }
+            }
+        }
+    }
+    ```
     
     Args:
         a (torch.Tensor): Input tensor of shape (K, M), stride 1 in M, dtype float32, on CUDA.
