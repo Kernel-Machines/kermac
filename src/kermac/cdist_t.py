@@ -8,8 +8,8 @@ from .module_cache import *
 from .common import *
 
 def cdist_t(
-    a_t : torch.Tensor,             # [K,M] # M-major
-    b_t : torch.Tensor,             # [K,N] # N-major
+    a : torch.Tensor,             # [K,M] # M-major
+    b : torch.Tensor,             # [K,N] # N-major
     out : torch.Tensor = None,      # [N,M] # M-major
     p : float = 2.0,
     skip_epilogue : bool = False,
@@ -33,48 +33,50 @@ def cdist_t(
         ValueError: If shapes, strides, dimensions, or CUDA devices are invalid.
     """
     # Check if inputs are tensors
-    if not isinstance(a_t, torch.Tensor) or not isinstance(b_t, torch.Tensor):
-        raise TypeError("a_t and b_t must be PyTorch tensors")
+    if not isinstance(a, torch.Tensor) or not isinstance(b, torch.Tensor):
+        raise TypeError("a and b must be PyTorch tensors")
     if out is not None and not isinstance(out, torch.Tensor):
         raise TypeError("out must be a PyTorch tensor if provided")
 
     # Check dtype
-    if a_t.dtype != torch.float32 or b_t.dtype != torch.float32:
-        raise TypeError("a_t and b_t must have dtype torch.float32")
+    if a.dtype != torch.float32 or b.dtype != torch.float32:
+        raise TypeError("a and b must have dtype torch.float32")
     if out is not None and out.dtype != torch.float32:
         raise TypeError("out must have dtype torch.float32")
 
     # Check number of dimensions
-    if a_t.dim() != 2 or b_t.dim() != 2:
-        raise ValueError("a_t and b_t must be 2-dimensional")
+    if a.dim() != 2 or b.dim() != 2:
+        raise ValueError("a and b must be 2-dimensional")
     if out is not None and out.dim() != 2:
         raise ValueError("out must be 2-dimensional")
 
     # Check CUDA device
-    if not a_t.is_cuda or not b_t.is_cuda:
-        raise ValueError("a_t and b_t must be on a CUDA device")
+    if not a.is_cuda or not b.is_cuda:
+        raise ValueError("a and b must be on a CUDA device")
     if out is not None and not out.is_cuda:
         raise ValueError("out must be on a CUDA device")
-    if a_t.device != b_t.device:
-        raise ValueError(f"a_t and b_t must be on the same CUDA device: got {a_t.device} and {b_t.device}")
-    if out is not None and out.device != a_t.device:
-        raise ValueError(f"out must be on the same CUDA device as inputs: got {out.device}, expected {a_t.device}")
+    
+    tensor_device = a.device
+    if not all(x.device == tensor_device for x in (a, b)):
+        raise ValueError(f"All inputs must be on the same CUDA device: got {[x.device for x in (a, b)]}")
+    if out is not None and out.device != tensor_device:
+        raise ValueError(f"out must be on the same CUDA device as inputs: got {out.device}, expected {tensor_device}")
 
     # Get shapes
-    K_a, M = a_t.shape
-    K_b, N = b_t.shape
+    K_a, M = a.shape
+    K_b, N = b.shape
 
     # Check shape consistency
     if K_a != K_b:
-        raise ValueError(f"K dimensions must match: got {K_a} for a_t and {K_b} for b_t")
+        raise ValueError(f"K dimensions must match: got {K_a} for a and {K_b} for b")
     
     K = K_a
 
     # Check strides (stride 1 in last dimension)
-    if a_t.stride(1) != 1:
-        raise ValueError("a_t must have stride 1 in dimension M (last dimension)")
-    if b_t.stride(1) != 1:
-        raise ValueError("b_t must have stride 1 in dimension N (last dimension)")
+    if a.stride(1) != 1:
+        raise ValueError("a must have stride 1 in dimension M (last dimension)")
+    if b.stride(1) != 1:
+        raise ValueError("b must have stride 1 in dimension N (last dimension)")
     if out is not None and out.stride(1) != 1:
         raise ValueError("out must have stride 1 in dimension M (last dimension)")
 
@@ -83,12 +85,16 @@ def cdist_t(
         if out.shape != (N, M):
             raise ValueError(f"out must have shape (N={N}, M={M}), got {out.shape}")
 
-    result = torch.zeros((N, M), dtype=torch.float32, device=a_t.device) if out is None else out
+    result = torch.zeros((N, M), dtype=torch.float32, device=a.device) if out is None else out
 
     device_module_map = DeviceModuleMap(debug)
 
     pt_stream = torch.cuda.current_stream()
     pt_device = pt_stream.device
+
+    if tensor_device != pt_device:
+        raise ValueError("cuda stream must be on the same device as the tensors: got {pt_device}, expected {tensor_device}")
+
     pt_device_id = pt_device.index
 
     device = Device(pt_device_id)
@@ -125,16 +131,16 @@ def cdist_t(
 
     grid = (num_blocks_M, num_blocks_N, 1)
     config = LaunchConfig(grid=grid, block=block, shmem_size=shmem_size)
-    ld_a_t = a_t.stride(0)
-    ld_b_t = b_t.stride(0)
-    ld_c_t = result.stride(0)
+    ld_a = a.stride(0)
+    ld_b = b.stride(0)
+    ld_c = result.stride(0)
 
     kernel_args = (
         np.float32(p),
         M, N, K,
-        a_t.data_ptr(), ld_a_t,
-        b_t.data_ptr(), ld_b_t,
-        result.data_ptr(), ld_c_t,
+        a.data_ptr(), ld_a,
+        b.data_ptr(), ld_b,
+        result.data_ptr(), ld_c,
     )
 
     launch(stream, config, kernel, *kernel_args)
