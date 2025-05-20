@@ -48,14 +48,15 @@ def main():
 
     if debug: 
         print('\n(Kermac Debug) Warmup kermac.cdist_grad')
-    kermac.cdist_grad(
-        torch.randn(10,100,device=device),
-        torch.randn(32,10,device=device),
-        torch.randn(16,10,device=device),
-        torch.randn(32,100,device=device),
-        p = p,
-        debug = debug
-    )
+    for _ in range(2):
+        kermac.cdist_grad(
+            torch.randn(10,100,device=device),
+            torch.randn(32,10,device=device),
+            torch.randn(16,10,device=device),
+            torch.randn(32,100,device=device),
+            p = p,
+            debug = debug
+        )
 
     tensor_A = torch.randn(size_N,size_M,device=device) # M-major # M-major 
     tensor_B = torch.randn(size_D,size_N,device=device) # N-major # K-major
