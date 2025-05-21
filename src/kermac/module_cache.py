@@ -40,8 +40,8 @@ class DeviceModuleMap(metaclass=Singleton):
 
     def get_module(self, device: Device, function_name : str, debug = False) -> Any:
         device_id = device.device_id
-        if device_id < 0:
-            raise ValueError(f"Invalid device ID: {device_id}")
+        if device.compute_capability.major < 8:
+            raise ValueError(f"Invalid device compute capability, (device:{device.compute_capability}, requrires at least:8.0")
 
         key = (device_id, function_name)
         with self._lock:
