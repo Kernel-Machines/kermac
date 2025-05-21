@@ -13,6 +13,7 @@ def cdist_t(
     out : torch.Tensor = None,  # [N,M] # M-major
     p : float = 2.0,
     skip_epilogue : bool = False,
+    try_to_align : bool = False,
     debug = False
 ):
     """
@@ -38,9 +39,11 @@ def cdist_t(
         out (torch.Tensor, optional=None): Output tensor of shape (N, M), stride 1 in M, dtype float32, on CUDA.
         p (float, optional=2.0): p value for the p-norm distance. 
         skip_epilogue (bool, optional=False): Avoid the final step of the result where we raise the result to the 1.0/p power.
+        try_to_align (bool, optional=False): Specialize kernel for if tensor A and B are 16 byte aligned in starting pointer and stride(1)
+        debug (bool, optional=False): Print debug messages.
     
     Returns:
-        torch.Tensor: Result tensor (placeholder implementation).
+        torch.Tensor: Result tensor.
     
     Raises:
         TypeError: If inputs are not PyTorch tensors or have incorrect dtype.
@@ -125,7 +128,11 @@ def cdist_t(
         norm_type = 'P'
 
     skip = 'true' if skip_epilogue else 'false'
-    function_string = f'cute_norm_m128m128k8p3<NormType::{norm_type},{skip}>'
+
+    align_4_A = 'true' if try_to_align and is_tensor_16_byte_aligned(a) else 'false'
+    align_4_B = 'true' if try_to_align and is_tensor_16_byte_aligned(b) else 'false'
+
+    function_string = f'cute_norm_m128m128k8p3<NormType::{norm_type},{skip},{align_4_A},{align_4_B}>'
     module_cubin = device_module_map.get_module(device, function_string, debug=debug)
     
     if debug:

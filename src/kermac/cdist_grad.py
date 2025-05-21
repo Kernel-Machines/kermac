@@ -48,11 +48,11 @@ def cdist_grad(
         c (torch.Tensor): Input tensor of shape (O, K), stride 1 in K, dtype float32, on CUDA.
         d (torch.Tensor): Input tensor of shape (N, M), stride 1 in M, dtype float32, on CUDA.
         out (torch.Tensor, optional=None): Output tensor of shape (O, N, M), stride 1 in M, dtype float32, on CUDA.
-        p (float, optional=2.0): p value for the p-norm distance. 
-        skip_epilogue (bool, optional=False): Avoid the final step of the result where we raise the result to the 1.0/p power.
+        p (float, optional=2.0): p value for the p-norm distance.
+        debug (bool, optional=False): Print debug messages.
     
     Returns:
-        torch.Tensor: Result tensor (placeholder implementation).
+        torch.Tensor: Result tensor.
     
     Raises:
         TypeError: If inputs are not PyTorch tensors or have incorrect dtype.
