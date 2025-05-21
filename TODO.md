@@ -4,3 +4,5 @@
 * batch modes
 * build-a-bear
 * replace my `_sqrt`, `_exp`, etc.. with `--use_fast_math` option in JIT
+* with inner dot product, can use samples, samples_m, centers, centers_m in L2 norm and accumulate (x @ m) @ x in registers locally
+* L1_M requires sqrt(M) to do regular norm
