@@ -72,10 +72,6 @@ def main():
 
     torch.cuda.synchronize()
 
-
-
-    torch.cuda.synchronize()
-
     if debug: 
         print('\n(Kermac Debug) Running kermac.cdist_t')
     timer.start()

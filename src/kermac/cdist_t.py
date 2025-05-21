@@ -105,7 +105,7 @@ def cdist_t(
 
     result = torch.zeros((N, M), dtype=torch.float32, device=a.device) if out is None else out
 
-    device_module_map = DeviceModuleMap(debug)
+    device_function_map = DeviceLoadedFunctionMap(debug)
 
     pt_stream = torch.cuda.current_stream()
     pt_device = pt_stream.device
@@ -133,11 +133,9 @@ def cdist_t(
     align_4_B = 'true' if try_to_align and is_tensor_16_byte_aligned(b) else 'false'
 
     function_string = f'cute_norm_m128m128k8p3<NormType::{norm_type},{skip},{align_4_A},{align_4_B}>'
-    module_cubin = device_module_map.get_module(device, function_string, debug=debug)
-    
+    kernel = device_function_map.get_function(device, function_string, debug=debug)
     if debug:
         print(f'(Kermac Debug) Launching kernel: {function_string}')
-    kernel = module_cubin.get_kernel(function_string)
 
     p = np.float32(p) # convert to float32
 

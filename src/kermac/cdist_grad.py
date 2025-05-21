@@ -124,7 +124,7 @@ def cdist_grad(
     
     result = torch.zeros((O, N, M), dtype=torch.float32, device=tensor_device) if out is None else out
 
-    device_module_map = DeviceModuleMap(debug)
+    device_function_map = DeviceLoadedFunctionMap(debug)
 
     pt_stream = torch.cuda.current_stream()
     pt_device = pt_stream.device
@@ -147,11 +147,10 @@ def cdist_grad(
         norm_type = 'P'
         
     function_string = f'cute_norm_kernel_gradient_m128n16o16k32p2<NormType::{norm_type}>'
-    module_cubin = device_module_map.get_module(device, function_string, debug=debug)
+    kernel = device_function_map.get_function(device, function_string, debug=debug)
 
     if debug:
         print(f'(Kermac Debug) Launching kernel: {function_string}')
-    kernel = module_cubin.get_kernel(function_string)
 
     p = np.float32(p) # convert to float32
 
