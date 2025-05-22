@@ -50,28 +50,70 @@ def cdist_t(
         ValueError: If shapes, strides, dimensions, or CUDA devices are invalid.
     """
 
-    if p == 1.0:
-        return run_kernel(
-            kernel_descriptor_l1_norm,
-            a, b, 
-            out = out,
-            try_to_align=try_to_align,
-            debug=debug
-        )
-    elif p == 2.0:
-        return run_kernel(
-            kernel_descriptor_l2_norm,
-            a, b,
-            out = out,
-            try_to_align=try_to_align,
-            debug=debug
-        )
+    if not skip_epilogue:
+        if p == 1.0:
+            return run_kernel(
+                kernel_descriptor_l1_norm,
+                a, b, 
+                out = out,
+                try_to_align=try_to_align,
+                debug=debug
+            )
+        elif p == 2.0:
+            return run_kernel(
+                kernel_descriptor_l2_norm,
+                a, b,
+                out = out,
+                try_to_align=try_to_align,
+                debug=debug
+            )
+        else:
+            return run_kernel(
+                kernel_descriptor_p_norm,
+                a, b,
+                out = out,
+                p = p,
+                try_to_align=try_to_align,
+                debug=debug
+            )
     else:
-        return run_kernel(
-            kernel_descriptor_p_norm,
-            a, b,
-            out = out,
-            p = p,
-            try_to_align=try_to_align,
-            debug=debug
-        )
+        if p == 1.0:
+            return run_kernel(
+                KernelDescriptor(
+                    inner_operator=InnerOperator.DIFF,
+                    inner_power=PowerType.ABS,
+                    outer_power=PowerType.NOOP,
+                    kernel_type=None
+                ),
+                a, b, 
+                out = out,
+                try_to_align=try_to_align,
+                debug=debug
+            )
+        elif p == 2.0:
+            return run_kernel(
+                KernelDescriptor(
+                    inner_operator=InnerOperator.DIFF,
+                    inner_power=PowerType.SQUARE,
+                    outer_power=PowerType.NOOP,
+                    kernel_type=None
+                ),
+                a, b,
+                out = out,
+                try_to_align=try_to_align,
+                debug=debug
+            )
+        else:
+            return run_kernel(
+                KernelDescriptor(
+                    inner_operator=InnerOperator.DIFF,
+                    inner_power=PowerType.POW,
+                    outer_power=PowerType.NOOP,
+                    kernel_type=None
+                ),
+                a, b,
+                out = out,
+                p = p,
+                try_to_align=try_to_align,
+                debug=debug
+            )
