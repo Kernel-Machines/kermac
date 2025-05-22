@@ -365,8 +365,8 @@ kernel_cute_build_kernel(
         if constexpr (kernel_type == KernelType::NONE) {
             accum = accum;
         } else if constexpr (kernel_type == KernelType::LAPLACE) {
-            ///TODO: can either pass this in or do it at the time after the inflight memory requests.
-            // Division is expensive, but if batch mode bandwidth it should stay bandwidth and not gamma.
+            ///TODO: can either pass this gamma in or do it at the time after the inflight memory requests.
+            // Division is expensive, but for batch mode with bandwidth it should stay bandwidth and not gamma.
             //
             T gamma = T(1.0) / bandwidth;
             accum = accum * -gamma;

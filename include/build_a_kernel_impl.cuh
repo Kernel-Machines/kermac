@@ -10,8 +10,8 @@ template<
     PowerType inner_power,
     PowerType outer_power,
     KernelType kernel_type,
-    bool align_4_A = false,
-    bool align_4_B = false,
+    Alignment align_A,
+    Alignment align_B,
     class T
 >
 __device__
@@ -60,7 +60,7 @@ cute_build_kernel_m128n128k8p3_impl(
     // Define the thread layouts (static)
     // Dispatch to align_4 is tensors are aligned by 16 bytes
     auto copyA = [] {
-        if constexpr (align_4_A) {
+        if constexpr (align_A == Alignment::ALIGN_4) {
             return make_tiled_copy(
                 Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<uint128_t>, T>{},
                 Layout<Shape<_32, _8>>{},
@@ -76,7 +76,7 @@ cute_build_kernel_m128n128k8p3_impl(
     }();
 
     auto copyB = [] {
-        if constexpr (align_4_B) {
+        if constexpr (align_B == Alignment::ALIGN_4) {
             return make_tiled_copy(
                 Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<uint128_t>, T>{},
                 Layout<Shape<_32, _8>>{},
@@ -109,13 +109,15 @@ cute_build_kernel_m128n128k8p3_impl(
     );
 }
 
+///TODO: Can turn off predication in certain cases
+// check for divisibility by cta size
 template <
     InnerOperator inner_operator,
     PowerType inner_power,
     PowerType outer_power,
     KernelType kernel_type,
-    bool align_4_A = false,
-    bool align_4_B = false
+    Alignment align_A,
+    Alignment align_B
 >
 __global__
 __launch_bounds__(256)
@@ -135,8 +137,8 @@ cute_build_kernel_m128n128k8p3(
         inner_power,
         outer_power,
         kernel_type,
-        align_4_A,
-        align_4_B
+        align_A,
+        align_B
     >(
         m, n, k, 
         A, ldA, 

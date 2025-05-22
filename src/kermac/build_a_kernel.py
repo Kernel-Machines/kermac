@@ -9,6 +9,20 @@ from typing import Optional
 import torch
 import numpy as np
 
+# For templates to dictate whether
+# an input tensor is aligned to 16 Bytes (4 float elements)
+class Alignment(Enum):
+    ALIGN_1 = auto()
+    ALIGN_4 = auto()
+
+# For templates to dictate the type of
+# contraction operation
+class InnerOperator(Enum):
+    DIFF = auto()
+    DOT = auto()
+
+# For templates to dictate the type of
+# inner and outer power operation
 class PowerType(Enum):
     NOOP = auto()
     ABS = auto()
@@ -16,10 +30,8 @@ class PowerType(Enum):
     SQRT = auto()
     POW = auto()
 
-class InnerOperator(Enum):
-    DIFF = auto()
-    DOT = auto()
-
+# For templates to dictate the type of
+# kernel to apply
 class KernelType(Enum):
     NONE = auto()
     LAPLACE = auto()
@@ -32,23 +44,30 @@ class Symmetry(Enum):
 class KernelDescriptor():
     def __init__(
         self,
-        inner_operator : InnerOperator = InnerOperator.DIFF,
-        inner_power : PowerType = PowerType.SQUARE,
-        outer_power : PowerType = PowerType.SQRT,
-        kernel_type : KernelType = KernelType.LAPLACE,
-        symmetry : Symmetry = Symmetry.NonSymmetric,
+        inner_operator,
+        inner_power,
+        outer_power,
+        kernel_type,
     ):
         self._inner_operator = inner_operator
         self._inner_power = inner_power
         self._outer_power = outer_power
         self._kernel_type = kernel_type
-        self._symmetrc = symmetry
+    
+    def _render_function_name(
+      self,
+      align_A,
+      align_B,
+    ):
         kernel_name_str = f'cute_build_kernel_m128n128k8p3'
-        inner_operator_str = f'InnerOperator::{inner_operator.name}'
-        inner_power_str = f'PowerType::{inner_power.name}'
-        outer_power_str = f'PowerType::{outer_power.name}'
-        kernel_type_str = f'KernelType::{kernel_type.name}'
-        self._function_name = f'{kernel_name_str}<{inner_operator_str},{inner_power_str},{outer_power_str},{kernel_type_str}>'
+        inner_operator_str = f'InnerOperator::{self._inner_operator.name}'
+        inner_power_str = f'PowerType::{self._inner_power.name}'
+        outer_power_str = f'PowerType::{self._outer_power.name}'
+        kernel_type_str = f'KernelType::{self._kernel_type.name}'
+        align_A_str = f'Alignment::{align_A.name}'
+        align_B_str = f'Alignment::{align_B.name}'
+        function_name = f'{kernel_name_str}<{inner_operator_str},{inner_power_str},{outer_power_str},{kernel_type_str},{align_A_str},{align_B_str}>'
+        return function_name
 
 kernel_descriptor_laplace_l1 = \
     KernelDescriptor(
@@ -108,6 +127,7 @@ def run_kernel(
     inner_p : Optional[float] = None,
     outer_p : Optional[float] = None,
     bandwidth : Optional[float] = None,
+    try_to_align : bool = False,
     debug = False
 ):
     if p is not None:
@@ -206,10 +226,15 @@ def run_kernel(
     device.set_current()
     stream = PyTorchStreamWrapper(pt_stream)
 
-    kernel = device_function_map.get_function(device, kernel_descriptor._function_name, debug=debug)
+    align_4_A = Alignment.ALIGN_4 if try_to_align and is_tensor_16_byte_aligned(a) else Alignment.ALIGN_1
+    align_4_B = Alignment.ALIGN_4 if try_to_align and is_tensor_16_byte_aligned(b) else Alignment.ALIGN_1
+
+    function_name = kernel_descriptor._render_function_name(align_4_A, align_4_B)
+
+    kernel = device_function_map.get_function(device, function_name, debug=debug)
 
     if debug:
-        print(f'(Kermac Debug) Launching kernel: {kernel_descriptor._function_name}')
+        print(f'(Kermac Debug) Launching kernel: {function_name}')
 
     bM = 128
     bN = 128

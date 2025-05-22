@@ -44,6 +44,11 @@ enum class NormType {
     P
 };
 
+enum class Alignment {
+    ALIGN_1,
+    ALIGN_4
+};
+
 enum class InnerOperator {
     DIFF,
     DOT
