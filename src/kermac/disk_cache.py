@@ -32,7 +32,7 @@ class DiskCache():
                 if debug:
                     print(f"(Kermac Debug) Updated stored src hash to: {current_file_src_hash}")
             if debug:
-                print("(Kermac Debug) Hashes match. No action taken.")
+                print("(Kermac Debug) Hashes match. Keeping database pre-compiled cubin entries.")
 
     @staticmethod
     def _serialize_key(params: Dict[str, Any]) -> str:

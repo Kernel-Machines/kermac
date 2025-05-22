@@ -30,9 +30,12 @@ class DeviceLoadedFunctionMap(metaclass=Singleton):
     def __init__(self, debug = False):
         self._functions: Dict[Tuple[int, str], Any] = {}  # device_id -> module
         self._lock = threading.Lock()
+        if debug:
+            print(f'(Kermac Debug) Using database at: {cache_root().resolve()}')
         directory = get_include_local_cuda_dir()
         hash_result = hash_text_files(directory)
-        print(f"Combined hash of text files: {hash_result}")
+        if debug:
+            print(f"(Kermac Debug) Combined hash of cuda source files: {hash_result}")
         self._db = DiskCache(
             cache_dir=str(cache_root().resolve()),
             max_size_mb=1024,
@@ -41,8 +44,6 @@ class DeviceLoadedFunctionMap(metaclass=Singleton):
             debug=debug
         )
         self._cuda_version = str(torch.version.cuda)
-        if debug:
-            print(f'(Kermac Debug) Using database at: {cache_root().resolve()}')
 
         # Example usage
         
