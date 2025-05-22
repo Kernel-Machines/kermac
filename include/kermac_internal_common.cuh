@@ -44,6 +44,24 @@ enum class NormType {
     P
 };
 
+enum class InnerOperator {
+    DIFF,
+    DOT
+};
+
+enum class PowerType {
+    ABS,
+    SQUARE,
+    SQRT,
+    POW
+};
+
+enum class KernelType {
+    None,
+    LAPLACE,
+    GAUSSIAN
+};
+
 template <class T>
 static
 __forceinline__

@@ -1,0 +1,135 @@
+from cuda.core.experimental import Device
+from enum import Enum, auto
+from .module_cache import *
+
+from typing import Optional, Union
+
+class PowerType(Enum):
+    ABS = auto()
+    SQUARE = auto()
+    SQRT = auto()
+    POW = auto()
+
+class InnerOperator(Enum):
+    DIFF = auto()
+    DOT = auto()
+
+class KernelType(Enum):
+    NONE = auto()
+    LAPLACE = auto()
+    GAUSSIAN = auto()
+
+class Symmetry(Enum):
+    NonSymmetric = auto()
+    Symmetric = auto()
+
+class KernelDescriptor():
+    def __init__(
+        self,
+        inner_operator : InnerOperator = InnerOperator.DIFF,
+        inner_power : PowerType = PowerType.SQUARE,
+        outer_power : PowerType = PowerType.SQRT,
+        kernel_type : KernelType = KernelType.LAPLACE,
+        symmetry : Symmetry = Symmetry.NonSymmetric,
+    ):
+        self._inner_operator = inner_operator
+        self._inner_power = inner_power
+        self._outer_power = outer_power
+        self._kernel_type = kernel_type
+        self._symmetrc = symmetry
+        kernel_name_str = f'cute_build_kernel_m128n128k8p3'
+        inner_operator_str = f'InnerOperator::{inner_operator.name}'
+        inner_power_str = f'PowerType::{inner_power.name}'
+        outer_power_str = f'PowerType::{outer_power.name}'
+        kernel_type_str = f'KernelType::{kernel_type.name}'
+        self._function_name = f'{kernel_name_str}<{inner_operator_str},{inner_power_str},{outer_power_str},{kernel_type_str}>'
+
+def run_kernel(
+    kernel_descriptor : KernelDescriptor,
+    a : torch.Tensor,
+    b : torch.Tensor,
+    out : torch.Tensor = None,
+    p : Optional[float] = None,
+    inner_p : Optional[float] = None,
+    outer_p : Optional[float] = None,
+    bandwidth : Optional[float] = None,
+):
+    if p is not None:
+        if kernel_descriptor._inner_power is not PowerType.POW and kernel_descriptor._outer_power is not PowerType.POW:
+            raise ValueError("`p` is set but kernel doesn't use the value")
+        if inner_p is not None:
+            raise ValueError("`inner_p` is set but 'p' is also set")
+        if outer_p is not None:
+            raise ValueError("`outer_p` is set but 'p' is also set")
+
+    if inner_p is not None:
+        if kernel_descriptor._inner_power is not PowerType.POW:
+            raise ValueError("`inner_p` is set but 'inner_power' is not 'POW")
+        
+    if outer_p is not None:
+        if kernel_descriptor._outer_power is not PowerType.POW:
+            raise ValueError("`outer_p` is set but 'outer_power' is not 'POW")
+
+    if p is not None:
+        inner_p = p
+        outer_p = 1.0/p
+
+    if bandwidth is not None:
+        if kernel_descriptor._kernel_type is KernelType.NONE:
+             raise ValueError("`bandwidth` is set but 'kernel_type' is not 'NONE")
+        
+    
+    # Check if inputs are tensors
+    if not isinstance(a, torch.Tensor) or not isinstance(b, torch.Tensor):
+        raise TypeError("a and b must be PyTorch tensors")
+    if out is not None and not isinstance(out, torch.Tensor):
+        raise TypeError("out must be a PyTorch tensor if provided")
+
+    # Check dtype
+    if a.dtype != torch.float32 or b.dtype != torch.float32:
+        raise TypeError("a and b must have dtype torch.float32")
+    if out is not None and out.dtype != torch.float32:
+        raise TypeError("out must have dtype torch.float32")
+
+    # Check number of dimensions
+    if a.dim() != 2 or b.dim() != 2:
+        raise ValueError("a and b must be 2-dimensional")
+    if out is not None and out.dim() != 2:
+        raise ValueError("out must be 2-dimensional")
+
+    # Check CUDA device
+    if not a.is_cuda or not b.is_cuda:
+        raise ValueError("a and b must be on a CUDA device")
+    if out is not None and not out.is_cuda:
+        raise ValueError("out must be on a CUDA device")
+    
+    tensor_device = a.device
+    if not all(x.device == tensor_device for x in (a, b)):
+        raise ValueError(f"All inputs must be on the same CUDA device: got {[x.device for x in (a, b)]}")
+    if out is not None and out.device != tensor_device:
+        raise ValueError(f"out must be on the same CUDA device as inputs: got {out.device}, expected {tensor_device}")
+
+    # Get shapes
+    K_a, M = a.shape
+    K_b, N = b.shape
+
+    # Check shape consistency
+    if K_a != K_b:
+        raise ValueError(f"K dimensions must match: got {K_a} for a and {K_b} for b")
+    
+    K = K_a
+
+    # Check strides (stride 1 in last dimension)
+    if a.stride(1) != 1:
+        raise ValueError("a must have stride 1 in dimension M (last dimension)")
+    if b.stride(1) != 1:
+        raise ValueError("b must have stride 1 in dimension N (last dimension)")
+    if out is not None and out.stride(1) != 1:
+        raise ValueError("out must have stride 1 in dimension M (last dimension)")
+
+    # Check output shape if provided
+    if out is not None:
+        if out.shape != (N, M):
+            raise ValueError(f"out must have shape (N={N}, M={M}), got {out.shape}")
+
+    result = torch.zeros((N, M), dtype=torch.float32, device=a.device) if out is None else out
