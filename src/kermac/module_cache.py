@@ -7,6 +7,7 @@ from cuda.core.experimental import Device, Program, ProgramOptions, ObjectCode
 
 from .paths import *
 from .disk_cache import *
+from .common import hash_text_files
 
 def get_compute_capability(device : Device) -> str:
     arch = "".join(f"{i}" for i in device.compute_capability)
@@ -29,14 +30,22 @@ class DeviceLoadedFunctionMap(metaclass=Singleton):
     def __init__(self, debug = False):
         self._functions: Dict[Tuple[int, str], Any] = {}  # device_id -> module
         self._lock = threading.Lock()
+        directory = get_include_local_cuda_dir()
+        hash_result = hash_text_files(directory)
+        print(f"Combined hash of text files: {hash_result}")
         self._db = DiskCache(
             cache_dir=str(cache_root().resolve()),
             max_size_mb=1024,
             db_name='cubin_cache',
+            current_file_src_hash=hash_result,
+            debug=debug
         )
         self._cuda_version = str(torch.version.cuda)
         if debug:
             print(f'(Kermac Debug) Using database at: {cache_root().resolve()}')
+
+        # Example usage
+        
 
     def get_function(self, device: Device, function_name : str, debug = False) -> Any:
         device_id = device.device_id
@@ -112,3 +121,4 @@ class DeviceLoadedFunctionMap(metaclass=Singleton):
             function = module_cubin.get_kernel(function_name)
             self._functions[key] = function
             return function
+            

@@ -6,11 +6,33 @@ import hashlib
 import pickle
 
 class DiskCache():
-    def __init__(self, cache_dir, max_size_mb, db_name):
+    def __init__(
+            self, 
+            cache_dir, 
+            max_size_mb, 
+            db_name, 
+            current_file_src_hash,
+            debug = False
+        ):
         os.makedirs(cache_dir, exist_ok=True)
         db_max_size_bytes = max_size_mb * 1024 * 1024
         self.env = lmdb.open(cache_dir, map_size=db_max_size_bytes, max_dbs=1)
         self.db = self.env.open_db(db_name.encode())
+
+        """Check if provided hash matches stored hash; clear DB and update if needed."""
+        with self.env.begin(write=True, db=self.db) as txn:
+            stored_hash = txn.get(b'file_source_hash')
+            stored_hash = stored_hash.decode() if stored_hash else None
+
+            if stored_hash != current_file_src_hash:
+                if debug:
+                    print(f"(Kermac Debug) File source hash mismatch (stored: {stored_hash}, provided: {current_file_src_hash}). Clearing database.")
+                txn.drop(self.db, delete=False)  # Clear all entries
+                txn.put(b'file_source_hash', current_file_src_hash.encode())
+                if debug:
+                    print(f"(Kermac Debug) Updated stored src hash to: {current_file_src_hash}")
+            if debug:
+                print("(Kermac Debug) Hashes match. No action taken.")
 
     @staticmethod
     def _serialize_key(params: Dict[str, Any]) -> str:
