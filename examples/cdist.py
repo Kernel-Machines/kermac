@@ -41,6 +41,7 @@ def main():
     skip_epilogue = args.skip_epilogue
     try_align = args.try_align
     debug = args.debug
+    # debug = True
 
     device = torch.device('cuda')
     timer = CudaTimer()

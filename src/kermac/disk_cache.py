@@ -1,6 +1,6 @@
 import lmdb
 import os
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 import json
 import hashlib
 import pickle
@@ -44,16 +44,56 @@ class DiskCache():
 
     def store(self, params: Dict[str, Any], data) -> None:
         key = self._serialize_key(params).encode()
+        serialized_data = pickle.dumps(data)
+        data_hash = hashlib.sha256(serialized_data).digest()
+        
         with self.env.begin(write=True, db=self.db) as txn:
-            serialized_data = pickle.dumps(data)
-            txn.put(key, serialized_data)
+            # Store key -> hash
+            txn.put(key, data_hash)
+            # Store hash -> serialized data
+            txn.put(data_hash, serialized_data)
+
+    # Store multiple functions that all point to the same cubin
+    # This allows sending multiple function signatures to jit 
+    # all getting embedded in to the same cubin
+    def store_multiple(self, params: List[Dict[str, Any]], data) -> None:
+        serialized_data = pickle.dumps(data)
+        data_hash = hashlib.sha256(serialized_data).digest()
+        
+        with self.env.begin(write=True, db=self.db) as txn:
+            # Store key -> hash for each params dict
+            for param in params:
+                key = self._serialize_key(param).encode()
+                txn.put(key, data_hash)
+            # Store hash -> serialized data
+            txn.put(data_hash, serialized_data)
+
+    def lookup_module(self, params: Dict[str, Any]) -> Optional[bytes]:
+        key_str = self._serialize_key(params)
+        with self.env.begin(db=self.db) as txn:
+            data_hash = txn.get(key_str.encode())
+            if data_hash:
+                return data_hash
+            return None
+        
+    def lookup_cubin(self, data_hash: bytes) -> Optional[bytes]:
+        with self.env.begin(db=self.db) as txn:
+            serialized_data = txn.get(data_hash)
+            if serialized_data:
+                # lookup hash -> binary
+                return pickle.loads(serialized_data)
+            return None
 
     def lookup(self, params: Dict[str, Any]) -> Optional[bytes]:
         key_str = self._serialize_key(params)
         with self.env.begin(db=self.db) as txn:
-            serialized_data = txn.get(key_str.encode())
-            if serialized_data:
-                return pickle.loads(serialized_data)
+            data_hash = txn.get(key_str.encode())
+            if data_hash:
+                # lookup key -> hash
+                serialized_data = txn.get(data_hash)
+                if serialized_data:
+                    # lookup hash -> binary
+                    return pickle.loads(serialized_data)
             return None
 
     def clear(self) -> None:

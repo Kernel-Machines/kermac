@@ -214,6 +214,7 @@ def run_kernel(
     result = torch.zeros((N, M), dtype=torch.float32, device=a.device) if out is None else out
 
     device_function_map = DeviceLoadedFunctionMap(debug)
+   
 
     pt_stream = torch.cuda.current_stream()
     pt_device = pt_stream.device
@@ -223,6 +224,15 @@ def run_kernel(
 
     pt_device_id = pt_device.index
     device = Device(pt_device_id)
+
+    # arch = get_compute_capability(device)
+    # function_names = [
+    #     kernel_descriptor_l1_norm._render_function_name(Alignment.ALIGN_1, Alignment.ALIGN_1),
+    #     kernel_descriptor_l2_norm._render_function_name(Alignment.ALIGN_1, Alignment.ALIGN_1)
+    # ]
+    # device_function_map.pre_compile_and_store_cubin(arch, function_names , debug=debug)
+    # exit()
+    
     device.set_current()
     stream = PyTorchStreamWrapper(pt_stream)
 
