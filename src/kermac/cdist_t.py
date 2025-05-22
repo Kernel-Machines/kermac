@@ -3,7 +3,6 @@ from cuda.core.experimental import Device, LaunchConfig, launch
 import torch
 import numpy as np
 
-from .paths import *
 from .module_cache import *
 from .common import *
 
@@ -137,8 +136,6 @@ def cdist_t(
     if debug:
         print(f'(Kermac Debug) Launching kernel: {function_string}')
 
-    p = np.float32(p) # convert to float32
-
     bM = 128
     bN = 128
 
@@ -153,11 +150,11 @@ def cdist_t(
     ld_c = result.stride(0)
 
     kernel_args = (
-        np.float32(p),
         M, N, K,
         a.data_ptr(), ld_a,
         b.data_ptr(), ld_b,
         result.data_ptr(), ld_c,
+        np.float32(p)
     )
 
     launch(stream, config, kernel, *kernel_args)

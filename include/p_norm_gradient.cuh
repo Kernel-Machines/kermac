@@ -3,6 +3,7 @@
 #include <kermac_internal_common.cuh>
 #include <cute/tensor.hpp>
 
+#if 0
 template <
 class SmemLayoutA,
 class SmemLayoutB,
@@ -15,6 +16,7 @@ struct SharedStorageNormGradient
     alignas(16) cute::ArrayEngine<T, cute::cosize_v<SmemLayoutB>> B;
     alignas(16) cute::ArrayEngine<T, cute::cosize_v<SmemLayoutC>> C;
 };
+#endif
 
 /// TODO: Need to make UniversalCopy smem to rmem available for different cta sizes
 template <

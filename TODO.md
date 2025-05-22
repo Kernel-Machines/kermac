@@ -8,3 +8,4 @@
 * L1_M requires sqrt(M) to do regular norm
 * database should be able to bulk compile functions mapping hash of cubin to cubin binary
 * for each function in the bulk compile a function -> hash of cubin should be generated for a separate database.
+* align_1 align_4 for build_a_kernel

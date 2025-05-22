@@ -1,10 +1,16 @@
-from cuda.core.experimental import Device
-from enum import Enum, auto
-from .module_cache import *
+from cuda.core.experimental import Device, LaunchConfig, launch
 
-from typing import Optional, Union
+from .module_cache import *
+from .common import *
+
+from enum import Enum, auto
+from typing import Optional
+
+import torch
+import numpy as np
 
 class PowerType(Enum):
+    NOOP = auto()
     ABS = auto()
     SQUARE = auto()
     SQRT = auto()
@@ -53,6 +59,7 @@ def run_kernel(
     inner_p : Optional[float] = None,
     outer_p : Optional[float] = None,
     bandwidth : Optional[float] = None,
+    debug = False
 ):
     if p is not None:
         if kernel_descriptor._inner_power is not PowerType.POW and kernel_descriptor._outer_power is not PowerType.POW:
@@ -76,9 +83,12 @@ def run_kernel(
 
     if bandwidth is not None:
         if kernel_descriptor._kernel_type is KernelType.NONE:
-             raise ValueError("`bandwidth` is set but 'kernel_type' is not 'NONE")
+             raise ValueError("`bandwidth` is set but 'kernel_type' is 'NONE")
         
-    
+    if bandwidth is None:
+        if kernel_descriptor._kernel_type is not KernelType.NONE:
+            raise ValueError("`bandwidth` is not set but 'kernel_type' is not 'NONE")
+        
     # Check if inputs are tensors
     if not isinstance(a, torch.Tensor) or not isinstance(b, torch.Tensor):
         raise TypeError("a and b must be PyTorch tensors")
@@ -133,3 +143,50 @@ def run_kernel(
             raise ValueError(f"out must have shape (N={N}, M={M}), got {out.shape}")
 
     result = torch.zeros((N, M), dtype=torch.float32, device=a.device) if out is None else out
+
+    device_function_map = DeviceLoadedFunctionMap(debug)
+
+    pt_stream = torch.cuda.current_stream()
+    pt_device = pt_stream.device
+
+    if tensor_device != pt_device:
+        raise ValueError("cuda stream must be on the same device as the tensors: got {pt_device}, expected {tensor_device}")
+
+    pt_device_id = pt_device.index
+
+    device = Device(pt_device_id)
+
+    device.set_current()
+    stream = PyTorchStreamWrapper(pt_stream)
+
+    kernel = device_function_map.get_function(device, kernel_descriptor._function_name, debug=debug)
+
+    if debug:
+        print(f'(Kermac Debug) Launching kernel: {kernel_descriptor._function_name}')
+
+    bM = 128
+    bN = 128
+
+    block = 256
+    num_blocks_M = ceil_div(M, bM)
+    num_blocks_N = ceil_div(N, bN)
+
+    grid = (num_blocks_M, num_blocks_N, 1)
+    config = LaunchConfig(grid=grid, block=block)
+    ld_a = a.stride(0)
+    ld_b = b.stride(0)
+    ld_c = result.stride(0)
+
+    kernel_args = (
+        M, N, K,
+        a.data_ptr(), ld_a,
+        b.data_ptr(), ld_b,
+        result.data_ptr(), ld_c,
+        np.float32(inner_p),
+        np.float32(outer_p),
+        np.float32(bandwidth)
+    )
+
+    launch(stream, config, kernel, *kernel_args)
+
+    return result

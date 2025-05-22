@@ -50,6 +50,7 @@ enum class InnerOperator {
 };
 
 enum class PowerType {
+    NOOP,
     ABS,
     SQUARE,
     SQRT,
@@ -57,7 +58,7 @@ enum class PowerType {
 };
 
 enum class KernelType {
-    None,
+    NONE,
     LAPLACE,
     GAUSSIAN
 };

@@ -1,5 +1,7 @@
 #pragma once
 
+#pragma once
+
 #include <kermac_internal_common.cuh>
 #include <cute/tensor.hpp>
 
@@ -19,8 +21,10 @@ struct SharedStorageNorm
 template <
     bool predicate_reads,
     bool predicate_writes,
-    bool skip_epilogue,
-    NormType norm_type,
+    InnerOperator inner_operator,
+    PowerType inner_power,
+    PowerType outer_power,
+    KernelType kernel_type,
     class ProblemShape, class CtaTiler, class ThreadTiler,
     class AStride, class ASmemLayout, class TiledCopyA,
     class BStride, class BSmemLayout, class TiledCopyB,
@@ -30,15 +34,15 @@ template <
 __device__
 __forceinline__
 void
-kernel_cute_p_norm(
+kernel_cute_build_kernel(
     ProblemShape shape_MNK, CtaTiler cta_tiler, ThreadTiler thread_tiler,
     T const *A, AStride dA, ASmemLayout sA_layout, TiledCopyA copy_a,
     T const *B, BStride dB, BSmemLayout sB_layout, TiledCopyB copy_b,
     T       *C, CStride dC, CSmemLayout,
-    T p_power
+    T p_power_inner, 
+    T p_power_outer,
+    T bandwidth
 ) {
-    static_assert(norm_type == NormType::L1 || norm_type == NormType::L2 || norm_type == NormType::P);
-
     using namespace cute;
 
     // Preconditions
@@ -299,48 +303,82 @@ kernel_cute_p_norm(
                 smem_pipe_read = (smem_pipe_read == K_PIPE_MAX-1) ? 0 : smem_pipe_read+1;
             }
 
-            // Apply norm diff here
+            // Apply inner
             CUTE_UNROLL
             for (int m = 0; m < size<0>(tCrC); m++) {
                 CUTE_UNROLL
                 for (int n = 0; n < size<1>(tCrC); n++) {
-                    T diff = tCrB(n,k_block) - tCrA(m,k_block);
-                    if constexpr (norm_type == NormType::L1) {
-                        diff = _abs(diff);
-                    } else if constexpr (norm_type == NormType::L2) {
-                        diff = diff * diff;
-                    } else if constexpr (norm_type == NormType::P) {
-                        diff = _abs(diff);
-                        diff = _pow(diff, p_power);
+                    T diff;
+                    if constexpr (inner_operator == InnerOperator::DIFF) {
+                        diff = tCrB(n,k_block) - tCrA(m,k_block);
+                    } else if constexpr (inner_operator == InnerOperator::DOT) {
+                        diff = tCrB(n,k_block) * tCrA(m,k_block);
                     } else {
                         diff = _nan<T>();
                     }
+
+                    if constexpr (inner_power == PowerType::NOOP) {
+                        diff = diff;
+                    } else if constexpr (inner_power == PowerType::ABS) {
+                        diff = _abs(diff);
+                    } else if constexpr (inner_power == PowerType::SQUARE) {
+                        diff = diff * diff;
+                    } else if constexpr (inner_power == PowerType::SQRT) {
+                        diff = _sqrt(diff);
+                    } else if constexpr (inner_power == PowerType::POW) {
+                        diff = _abs(diff);
+                        diff = _pow(diff, p_power_inner);
+                    } else {
+                        diff = _nan<T>();
+                    }
+
                     tCrC(m,n) += diff;
                 }
             }
         }
     }
 
-    T p_power_recip = c_one<T> / p_power;
-
-    if constexpr (skip_epilogue) {
-        // Don't apply the pow(accum, 1.0/p_power) to the result accumulators.
-    } else {
-         // Apply the pow(accum, 1.0/p_power) to the result accumulators.
-        CUTE_UNROLL
-        for (int i = 0; i < size(tCrC); i++) {
-            T accum = tCrC(i);
-            if constexpr (norm_type == NormType::L1) {
-                accum = accum;
-            } else if constexpr (norm_type == NormType::L2) {
-                accum = _sqrt(accum);
-            } else if constexpr (norm_type == NormType::P) {
-                accum = _pow(accum, p_power_recip);    
-            } else {
-                accum = _nan<T>();
-            }
-            tCrC(i) = accum;
+    // Apply outer
+    CUTE_UNROLL
+    for (int i = 0; i < size(tCrC); i++) {
+        T accum = tCrC(i);
+        if constexpr (outer_power == PowerType::NOOP) {
+            accum = accum;
+        } else if constexpr (outer_power == PowerType::ABS) {
+            accum = _abs(accum);
+        } else if constexpr (outer_power == PowerType::SQUARE) {
+            accum = accum * accum;
+        } else if constexpr (outer_power == PowerType::SQRT) {
+            accum = _sqrt(accum);
+        } else if constexpr (outer_power == PowerType::POW) {
+            accum = _pow(accum, p_power_outer);    
+        } else {
+            accum = _nan<T>();
         }
+        tCrC(i) = accum;
+    }
+
+    // Apply Kernel
+    CUTE_UNROLL
+    for (int i = 0; i < size(tCrC); i++) {
+        T accum = tCrC(i);
+        if constexpr (kernel_type == KernelType::NONE) {
+            accum = accum;
+        } else if constexpr (kernel_type == KernelType::LAPLACE) {
+            ///TODO: can either pass this in or do it at the time after the inflight memory requests.
+            // Division is expensive, but if batch mode bandwidth it should stay bandwidth and not gamma.
+            //
+            T gamma = T(1.0) / bandwidth;
+            accum = accum * -gamma;
+            accum = _exp(accum);
+        } else if constexpr (kernel_type == KernelType::GAUSSIAN) {
+            T gamma = T(1.0) / (2 * bandwidth * bandwidth);
+            accum = accum * -gamma;
+            accum = _exp(accum);
+        } else {
+            accum = _nan<T>();
+        }
+        tCrC(i) = accum;
     }
 
     // Write accumulators

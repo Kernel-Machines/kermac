@@ -1,13 +1,15 @@
 #pragma once
 
 #include <kermac_internal_common.cuh>
-#include <p_norm.cuh>
+#include <build_kernel.cuh>
 
 template<
     bool predicate_reads,
     bool predicate_writes,
-    NormType norm_type,
-    bool skip_epilogue,
+    InnerOperator inner_operator,
+    PowerType inner_power,
+    PowerType outer_power,
+    KernelType kernel_type,
     bool align_4_A = false,
     bool align_4_B = false,
     class T
@@ -15,12 +17,14 @@ template<
 __device__
 __forceinline__
 void
-cuda_p_norm_m128n128k8p3(
+cute_build_kernel_m128n128k8p3_impl(
     int m, int n, int k,
     T const *A, int ldA,
     T const *B, int ldB,
     T *C, int ldC,
-    T p_power
+    T p_power_inner, 
+    T p_power_outer,
+    T bandwidth
 ) {
     using namespace cute;
 
@@ -86,68 +90,60 @@ cuda_p_norm_m128n128k8p3(
             );
         }
     }();
-    
-#if 0
-    int smem_size = 
-        int(sizeof(
-            SharedStorageNorm<
-                decltype(sA), 
-                decltype(sB), 
-                T
-            >
-        ));
-    if (threadIdx.x == 0 && blockIdx.x == 0 && blockIdx.y == 0) {
-        printf("smem: %d\n", smem_size);
-        printf("p_power: %f\n", p_power);
-    }
-    return;
-#endif
 
-    kernel_cute_p_norm<
+    kernel_cute_build_kernel<
         predicate_reads,
         predicate_writes,
-        skip_epilogue,
-        norm_type
+        inner_operator,
+        inner_power,
+        outer_power,
+        kernel_type
     > (
         prob_shape, cta_tiler, thread_tiler, 
         A, dA, sA, copyA,
         B, dB, sB, copyB,
         C, dC, sC, 
-        p_power
+        p_power_inner,
+        p_power_outer,
+        bandwidth
     );
 }
 
 template <
-    NormType norm_type,
-    bool skip_epilogue,
+    InnerOperator inner_operator,
+    PowerType inner_power,
+    PowerType outer_power,
+    KernelType kernel_type,
     bool align_4_A = false,
     bool align_4_B = false
 >
 __global__
 __launch_bounds__(256)
 void
-cute_norm_m128m128k8p3(
+cute_build_kernel_m128n128k8p3(
     int m, int n, int k,
     float const *A, int ldA, // M,K m-major
     float const *B, int ldB, // N,K n-major
     float       *C, int ldC,  // M,N m-major
-    float p_power
+    float p_power_inner, 
+    float p_power_outer,
+    float bandwidth
 ) {
-    if constexpr (norm_type == NormType::P) {
-        cuda_p_norm_m128n128k8p3<true, true, norm_type, skip_epilogue, align_4_A, align_4_B>(
-            m, n, k, 
-            A, ldA, 
-            B, ldB, 
-            C, ldC, 
-            p_power
-        );
-    } else {
-        cuda_p_norm_m128n128k8p3<true, true, norm_type, skip_epilogue, align_4_A, align_4_B>(
-            m, n, k, 
-            A, ldA, 
-            B, ldB, 
-            C, ldC, 
-            c_zero<float>
-        );
-    }
+    cute_build_kernel_m128n128k8p3_impl<
+        true, true,
+        inner_operator,
+        inner_power,
+        outer_power,
+        kernel_type,
+        align_4_A,
+        align_4_B
+    >(
+        m, n, k, 
+        A, ldA, 
+        B, ldB, 
+        C, ldC, 
+        p_power_inner,
+        p_power_outer,
+        bandwidth
+    );
 }
