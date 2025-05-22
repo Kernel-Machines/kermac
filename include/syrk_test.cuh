@@ -1,4 +1,4 @@
-#pragma
+#pragma once
 
 #include <kermac_internal_common.cuh>
 
@@ -17,6 +17,7 @@ fast_sqrt(
 
 // Triangular indexing
 // idx -> lower triangle consecutive
+template <class T>
 __global__
 void
 syrk_test(

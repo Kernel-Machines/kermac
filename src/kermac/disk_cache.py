@@ -26,13 +26,15 @@ class DiskCache():
 
             if stored_hash != current_file_src_hash:
                 if debug:
-                    print(f"(Kermac Debug) File source hash mismatch (stored: {stored_hash}, provided: {current_file_src_hash}). Clearing database.")
+                    print(f"(Kermac Debug) File source hash mismatch (stored: {stored_hash}, provided: {current_file_src_hash}).")
+                    print(f"(Kermac Debug) Clearing database of pre-built cubin entries")
                 txn.drop(self.db, delete=False)  # Clear all entries
                 txn.put(b'file_source_hash', current_file_src_hash.encode())
                 if debug:
                     print(f"(Kermac Debug) Updated stored src hash to: {current_file_src_hash}")
-            if debug:
-                print("(Kermac Debug) Hashes match. Keeping database pre-compiled cubin entries.")
+            else:
+                if debug:
+                    print("(Kermac Debug) Hashes match. Keeping database pre-built cubin entries.")
 
     @staticmethod
     def _serialize_key(params: Dict[str, Any]) -> str:
