@@ -11,4 +11,10 @@ all = [
     "InnerOperator",
     "KernelType",
     "Symmetry",
+    "kernel_descriptor_laplace_l1",
+    "kernel_descriptor_laplace_l2",
+    "kernel_descriptor_p_norm",
+    "kernel_descriptor_l1_norm",
+    "kernel_descriptor_l2_norm",
+    "kernel_descriptor_mma",
 ]

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <kermac_internal_common.cuh>
-#include <build_kernel.cuh>
+#include <build_a_kernel.cuh>
 
 template<
     bool predicate_reads,

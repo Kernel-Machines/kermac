@@ -6,24 +6,9 @@ a = torch.randn(10,10000,device=device)
 b = torch.randn(10,10000,device=device)
 out = torch.randn(10000,10000,device=device)
 
-if False:
-    # Meant to name descriptor and reuse
-    euclidean_laplace_descriptor = \
-        kermac.KernelDescriptor(
-            inner_operator=kermac.InnerOperator.DIFF,
-            inner_power=kermac.PowerType.SQUARE,
-            outer_power=kermac.PowerType.SQRT,
-            kernel_type=kermac.KernelType.LAPLACE,
-        )
-
 print('Running euclidean laplace kernel')
 kermac.run_kernel(
-    kermac.KernelDescriptor(
-        inner_operator=kermac.InnerOperator.DIFF,
-        inner_power=kermac.PowerType.SQUARE,
-        outer_power=kermac.PowerType.SQRT,
-        kernel_type=kermac.KernelType.LAPLACE,
-    ),
+    kermac.kernel_descriptor_laplace_l2,
     a, b,
     out = out,
     bandwidth=10.0,
@@ -33,12 +18,7 @@ print(out)
 
 print('Running L1 laplace kernel')
 kermac.run_kernel(
-    kermac.KernelDescriptor(
-        inner_operator=kermac.InnerOperator.DIFF,
-        inner_power=kermac.PowerType.ABS,
-        outer_power=kermac.PowerType.NOOP,
-        kernel_type=kermac.KernelType.LAPLACE,
-    ),
+    kermac.kernel_descriptor_laplace_l1,
     a, b,
     out = out,
     bandwidth=10.0,
@@ -48,12 +28,7 @@ print(out)
 
 print('Running L1 norm kernel')
 kermac.run_kernel(
-    kermac.KernelDescriptor(
-        inner_operator=kermac.InnerOperator.DIFF,
-        inner_power=kermac.PowerType.ABS,
-        outer_power=kermac.PowerType.NOOP,
-        kernel_type=kermac.KernelType.NONE,
-    ),
+    kermac.kernel_descriptor_l1_norm,
     a, b,
     out = out,
     # bandwidth=10.0,
@@ -61,14 +36,17 @@ kermac.run_kernel(
 )
 print(out)
 
-print('Running p-power gaussian kernel')
-kermac.run_kernel(
+kernel_descriptor_gaussian_p_norm = \
     kermac.KernelDescriptor(
         inner_operator=kermac.InnerOperator.DIFF,
         inner_power=kermac.PowerType.POW,
         outer_power=kermac.PowerType.POW,
         kernel_type=kermac.KernelType.GAUSSIAN,
-    ),
+    )
+
+print('Running p-power gaussian kernel')
+kermac.run_kernel(
+    kernel_descriptor_gaussian_p_norm,
     a, b,
     out = out,
     inner_p=1.3,
@@ -80,12 +58,7 @@ print(out)
 
 print('Running L1 norm kernel again')
 kermac.run_kernel(
-    kermac.KernelDescriptor(
-        inner_operator=kermac.InnerOperator.DIFF,
-        inner_power=kermac.PowerType.ABS,
-        outer_power=kermac.PowerType.NOOP,
-        kernel_type=kermac.KernelType.NONE,
-    ),
+    kermac.kernel_descriptor_l1_norm,
     a, b,
     out = out,
     # bandwidth=10.0,
@@ -98,12 +71,7 @@ print(torch.cdist(a.T,b.T,p=1.0).T)
 
 print('Running MMA')
 kermac.run_kernel(
-    kermac.KernelDescriptor(
-        inner_operator=kermac.InnerOperator.DOT,
-        inner_power=kermac.PowerType.NOOP,
-        outer_power=kermac.PowerType.NOOP,
-        kernel_type=kermac.KernelType.NONE,
-    ),
+    kermac.kernel_descriptor_mma,
     a, b,
     out = out,
     # bandwidth=10.0,

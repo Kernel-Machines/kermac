@@ -50,6 +50,55 @@ class KernelDescriptor():
         kernel_type_str = f'KernelType::{kernel_type.name}'
         self._function_name = f'{kernel_name_str}<{inner_operator_str},{inner_power_str},{outer_power_str},{kernel_type_str}>'
 
+kernel_descriptor_laplace_l1 = \
+    KernelDescriptor(
+        inner_operator=InnerOperator.DIFF,
+        inner_power=PowerType.ABS,
+        outer_power=PowerType.NOOP,
+        kernel_type=KernelType.LAPLACE,
+    )
+
+kernel_descriptor_laplace_l2 = \
+    KernelDescriptor(
+        inner_operator=InnerOperator.DIFF,
+        inner_power=PowerType.SQUARE,
+        outer_power=PowerType.SQRT,
+        kernel_type=KernelType.LAPLACE,
+    )
+
+kernel_descriptor_p_norm = \
+    KernelDescriptor(
+        inner_operator=InnerOperator.DIFF,
+        inner_power=PowerType.POW,
+        outer_power=PowerType.POW,
+        kernel_type=KernelType.NONE,
+    )
+
+kernel_descriptor_l1_norm = \
+    KernelDescriptor(
+        inner_operator=InnerOperator.DIFF,
+        inner_power=PowerType.ABS,
+        outer_power=PowerType.NOOP,
+        kernel_type=KernelType.NONE,
+    )
+
+kernel_descriptor_l2_norm = \
+    KernelDescriptor(
+        inner_operator=InnerOperator.DIFF,
+        inner_power=PowerType.SQUARE,
+        outer_power=PowerType.SQRT,
+        kernel_type=KernelType.NONE,
+    )
+
+kernel_descriptor_mma = \
+    KernelDescriptor(
+        inner_operator=InnerOperator.DOT,
+        inner_power=PowerType.NOOP,
+        outer_power=PowerType.NOOP,
+        kernel_type=KernelType.NONE,
+    )
+
+
 def run_kernel(
     kernel_descriptor : KernelDescriptor,
     a : torch.Tensor,
@@ -78,8 +127,8 @@ def run_kernel(
             raise ValueError("`outer_p` is set but 'outer_power' is not 'POW")
 
     if p is not None:
-        inner_p = p
-        outer_p = 1.0/p
+        inner_p = p     # if p is set then interpret that we want p
+        outer_p = 1.0/p # and recip-p
 
     if bandwidth is not None:
         if kernel_descriptor._kernel_type is KernelType.NONE:
@@ -153,9 +202,7 @@ def run_kernel(
         raise ValueError("cuda stream must be on the same device as the tensors: got {pt_device}, expected {tensor_device}")
 
     pt_device_id = pt_device.index
-
     device = Device(pt_device_id)
-
     device.set_current()
     stream = PyTorchStreamWrapper(pt_stream)
 
