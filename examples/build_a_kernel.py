@@ -36,7 +36,7 @@ kermac.run_kernel(
     kermac.KernelDescriptor(
         inner_operator=kermac.InnerOperator.DIFF,
         inner_power=kermac.PowerType.ABS,
-        outer_power=kermac.PowerType.ABS,
+        outer_power=kermac.PowerType.NOOP,
         kernel_type=kermac.KernelType.LAPLACE,
     ),
     a, b,
@@ -51,7 +51,7 @@ kermac.run_kernel(
     kermac.KernelDescriptor(
         inner_operator=kermac.InnerOperator.DIFF,
         inner_power=kermac.PowerType.ABS,
-        outer_power=kermac.PowerType.ABS,
+        outer_power=kermac.PowerType.NOOP,
         kernel_type=kermac.KernelType.NONE,
     ),
     a, b,
@@ -83,7 +83,7 @@ kermac.run_kernel(
     kermac.KernelDescriptor(
         inner_operator=kermac.InnerOperator.DIFF,
         inner_power=kermac.PowerType.ABS,
-        outer_power=kermac.PowerType.ABS,
+        outer_power=kermac.PowerType.NOOP,
         kernel_type=kermac.KernelType.NONE,
     ),
     a, b,
