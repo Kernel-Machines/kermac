@@ -117,6 +117,34 @@ kernel_descriptor_mma = \
         kernel_type=KernelType.NONE,
     )
 
+def pre_compile_descriptors(
+    device,
+    descriptors: List[Any],
+    try_to_align=False,
+    debug=False
+):
+    function_names = []
+
+    if try_to_align:
+        if debug:
+            print('(Kermac Debug) Because `try_to_align` is set, generating full matrix of alignment conditions')
+        for descriptor in descriptors:
+            for align_A in Alignment:
+                for align_B in Alignment:
+                    function_names.append(descriptor._render_function_name(align_A=align_A, align_B=align_B))
+    else:
+        if debug:
+            print('(Kermac Debug) Because `try_to_align` is not set, generating only Align_1 conditions')
+        for descriptor in descriptors:
+            function_names.append(descriptor._render_function_name(align_A=Alignment.ALIGN_1, align_B=Alignment.ALIGN_1))
+
+    module_cache = ModuleCache(debug)
+    module_cache.compile_and_cache_functions(
+        device=device,
+        function_names=function_names,
+        debug=debug
+    )
+
 def run_kernel(
     kernel_descriptor : KernelDescriptor,
     a : torch.Tensor,
@@ -212,26 +240,23 @@ def run_kernel(
 
     result = torch.zeros((N, M), dtype=torch.float32, device=a.device) if out is None else out
 
-    device_function_map = DeviceLoadedFunctionMap(debug)
+    module_cache = ModuleCache(debug)
    
-
     pt_stream = torch.cuda.current_stream()
     pt_device = pt_stream.device
+    device = Device(pt_device.index)
+    device.set_current()
+    stream = PyTorchStreamWrapper(pt_stream)
 
     if tensor_device != pt_device:
         raise ValueError("cuda stream must be on the same device as the tensors: got {pt_device}, expected {tensor_device}")
-
-    device = Device(pt_device.index)
-    
-    device.set_current()
-    stream = PyTorchStreamWrapper(pt_stream)
 
     align_4_A = Alignment.ALIGN_4 if try_to_align and is_tensor_16_byte_aligned(a) else Alignment.ALIGN_1
     align_4_B = Alignment.ALIGN_4 if try_to_align and is_tensor_16_byte_aligned(b) else Alignment.ALIGN_1
 
     function_name = kernel_descriptor._render_function_name(align_4_A, align_4_B)
 
-    kernel = device_function_map.get_function(device, function_name, debug=debug)
+    kernel = module_cache.get_function(device, function_name, debug=debug)
 
     if debug:
         print(f'(Kermac Debug) Launching kernel: {function_name}')

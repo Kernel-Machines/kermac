@@ -1,5 +1,5 @@
 import threading
-from typing import Dict, Any, Tuple, Optional
+from typing import Dict, Any, Tuple, Optional, List
 import sys
 import torch
 
@@ -170,7 +170,7 @@ class CubinDatabase:
         """Close the LMDB environment."""
         self.env.close()
 
-def _compile_functions(
+def compile_functions(
     arch,
     function_names,
     debug = False
@@ -210,6 +210,54 @@ def _compile_functions(
     )
     return module_cubin
 
+def compile_and_cache_functions(
+    database: CubinDatabase,
+    cuda_version: str,
+    arch: str,
+    function_names: List[str],
+    debug = False
+):
+    function_db_keys_to_compile = []
+    function_names_to_compile = []
+
+    for function_name in function_names:
+        function_db_key = \
+            FunctionDBKey(
+                package_name=get_package_name(),
+                package_version=get_package_version(),
+                cuda_version=cuda_version,
+                arch = arch,
+                function_name=function_name
+            )
+        function_db_value = database.get_function_mapping(function_db_key)
+        if not function_db_value:
+            function_db_keys_to_compile.append(function_db_key)
+            function_names_to_compile.append(function_name)
+
+    if function_names_to_compile == []:
+        if debug:
+            print('(Kermac Debug) Nothing needs to compile')
+        return True
+    
+    module_cubin = compile_functions(
+        arch, 
+        function_names_to_compile,
+        debug
+    )
+
+    cubin_data_hash = hashlib.sha256(module_cubin.code).digest()
+
+    for function_db_key in function_db_keys_to_compile:
+        lowered_name = module_cubin._sym_map[function_db_key.function_name]
+        function_db_value = \
+            FunctionDBValue(
+                lowered_name=lowered_name,
+                cubin_data_hash=cubin_data_hash
+            )
+        database.put_function_mapping(key=function_db_key, value=function_db_value)
+    database.put_cubin(data_hash=cubin_data_hash, cubin_data=module_cubin.code)
+    return True
+
 class Singleton(type):
     """Metaclass for creating singleton classes."""
     _instances = {}
@@ -221,7 +269,7 @@ class Singleton(type):
                 cls._instances[cls] = super().__call__(*args, **kwargs)
         return cls._instances[cls]
     
-class DeviceLoadedFunctionMap(metaclass=Singleton):
+class ModuleCache(metaclass=Singleton):
     """Singleton class mapping device IDs to lazily loaded modules/functions."""
     
     def __init__(self, debug = False):
@@ -251,51 +299,18 @@ class DeviceLoadedFunctionMap(metaclass=Singleton):
 
     def compile_and_cache_functions(
         self,
-        arch,
-        function_names,
+        device,
+        function_names: List[str],
         debug = False
     ):
-        function_db_keys_to_compile = []
-        function_names_to_compile = []
-
-        for function_name in function_names:
-            function_db_key = \
-                FunctionDBKey(
-                    package_name=get_package_name(),
-                    package_version=get_package_version(),
-                    cuda_version=self._cuda_version,
-                    arch = arch,
-                    function_name=function_name
-                )
-            function_db_value = self._db.get_function_mapping(function_db_key)
-            if not function_db_value:
-                function_db_keys_to_compile.append(function_db_key)
-                function_names_to_compile.append(function_name)
-
-        if function_names_to_compile == []:
-            if debug:
-                print('(Kermac Debug) Nothing needs to compile')
-            return True
-        
-        print(function_names_to_compile)
-        module_cubin = _compile_functions(
-            arch, 
-            function_names_to_compile,
-            debug
+        arch = get_compute_capability(device)
+        compile_and_cache_functions(
+            database=self._db,
+            cuda_version=self._cuda_version,
+            arch=arch,
+            function_names=function_names,
+            debug=debug
         )
-
-        cubin_data_hash = hashlib.sha256(module_cubin.code).digest()
-
-        for function_db_key in function_db_keys_to_compile:
-            lowered_name = module_cubin._sym_map[function_db_key.function_name]
-            function_db_value = \
-                FunctionDBValue(
-                    lowered_name=lowered_name,
-                    cubin_data_hash=cubin_data_hash
-                )
-            self._db.put_function_mapping(key=function_db_key, value=function_db_value)
-        self._db.put_cubin(data_hash=cubin_data_hash, cubin_data=module_cubin.code)
-        return True
 
     def get_function(self, device: Device, function_name : str, debug = False) -> Any:
         device_id = device.device_id
@@ -329,7 +344,9 @@ class DeviceLoadedFunctionMap(metaclass=Singleton):
             if not function_db_value:
                 # The cubin for this function doesn't exist
                 # Need to compile it
-                success = self.compile_and_cache_functions(
+                success = compile_and_cache_functions(
+                    database=self._db,
+                    cuda_version=self._cuda_version,
                     arch=arch, 
                     function_names=[function_name], 
                     debug=debug

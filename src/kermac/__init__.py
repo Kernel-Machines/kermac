@@ -18,5 +18,5 @@ all = [
     "kernel_descriptor_l1_norm",
     "kernel_descriptor_l2_norm",
     "kernel_descriptor_mma",
-    "DeviceLoadedFunctionMap"
+    "pre_compile_descriptors"
 ]

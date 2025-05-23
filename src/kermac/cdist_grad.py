@@ -124,18 +124,16 @@ def cdist_grad(
     
     result = torch.zeros((O, N, M), dtype=torch.float32, device=tensor_device) if out is None else out
 
-    device_function_map = DeviceLoadedFunctionMap(debug)
+    module_cache = ModuleCache(debug)
 
     pt_stream = torch.cuda.current_stream()
     pt_device = pt_stream.device
+    device = Device(pt_device.index)
+    device.set_current()
+    stream = PyTorchStreamWrapper(pt_stream)
 
     if tensor_device != pt_device:
         raise ValueError("cuda stream must be on the same device as the tensors: got {pt_device}, expected {tensor_device}")
-
-    device = Device(pt_device.index)
-
-    device.set_current()
-    stream = PyTorchStreamWrapper(pt_stream)
 
     if p == 1.0:
         norm_type = 'L1'
@@ -145,7 +143,7 @@ def cdist_grad(
         norm_type = 'P'
         
     function_string = f'cute_norm_kernel_gradient_m128n16o16k32p2<NormType::{norm_type}>'
-    kernel = device_function_map.get_function(device, function_string, debug=debug)
+    kernel = module_cache.get_function(device, function_string, debug=debug)
 
     if debug:
         print(f'(Kermac Debug) Launching kernel: {function_string}')
