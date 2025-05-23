@@ -220,6 +220,8 @@ def compile_and_cache_functions(
     function_db_keys_to_compile = []
     function_names_to_compile = []
 
+    if debug:
+        print(f'(Kermac Debug) Checking which functions need to be compiled for arch: sm_{arch}')
     for function_name in function_names:
         function_db_key = \
             FunctionDBKey(
@@ -236,9 +238,11 @@ def compile_and_cache_functions(
 
     if function_names_to_compile == []:
         if debug:
-            print('(Kermac Debug) Nothing needs to compile')
+            print(f'(Kermac Debug) Nothing needs to compile for arch sm_{arch}')
         return True
-    
+    if debug:
+        for function_name_to_compile in function_names_to_compile:
+            print(f'(Kermac Debug) Need to compile for arch sm_{arch}: {function_name_to_compile}') 
     module_cubin = compile_functions(
         arch, 
         function_names_to_compile,
@@ -246,7 +250,7 @@ def compile_and_cache_functions(
     )
 
     cubin_data_hash = hashlib.sha256(module_cubin.code).digest()
-
+    print(f'(Kermac Debug) Storing function mappings to database')
     for function_db_key in function_db_keys_to_compile:
         lowered_name = module_cubin._sym_map[function_db_key.function_name]
         function_db_value = \
@@ -255,7 +259,9 @@ def compile_and_cache_functions(
                 cubin_data_hash=cubin_data_hash
             )
         database.put_function_mapping(key=function_db_key, value=function_db_value)
+    print(f'(Kermac Debug) Storing cubin to database')
     database.put_cubin(data_hash=cubin_data_hash, cubin_data=module_cubin.code)
+    print(f'(Kermac Debug) Stored')
     return True
 
 class Singleton(type):
