@@ -2,8 +2,18 @@ import torch
 import os
 import hashlib
 
+from cuda.core.experimental import Device
+
 def ceil_div(x, d):
     return int((x + d - 1) // d)
+
+def get_compute_capability(device) -> str:
+    if isinstance(device, torch.device):
+        pt_device_id = device.index
+        device = Device(pt_device_id)
+    
+    arch = "".join(f"{i}" for i in device.compute_capability)
+    return arch
 
 class PyTorchStreamWrapper:
     def __init__(self, pt_stream):
@@ -29,8 +39,7 @@ def is_tensor_16_byte_aligned(
     
     return True
 
-
-def hash_text_files(directory):
+def hash_cuda_include_files(directory):
     # Initialize SHA-256 hash object
     hasher = hashlib.sha256()
     

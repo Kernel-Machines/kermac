@@ -117,7 +117,6 @@ kernel_descriptor_mma = \
         kernel_type=KernelType.NONE,
     )
 
-
 def run_kernel(
     kernel_descriptor : KernelDescriptor,
     a : torch.Tensor,

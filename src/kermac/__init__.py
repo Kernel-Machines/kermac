@@ -1,6 +1,7 @@
 from .cdist_t import *
 from .cdist_grad import *
 from .build_a_kernel import *
+from .module_cache import *
 
 all = [
     "cdist_t",
@@ -17,4 +18,5 @@ all = [
     "kernel_descriptor_l1_norm",
     "kernel_descriptor_l2_norm",
     "kernel_descriptor_mma",
+    "DeviceLoadedFunctionMap"
 ]
