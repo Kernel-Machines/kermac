@@ -1,10 +1,10 @@
 from cuda.core.experimental import Device, LaunchConfig, launch
 
-from .module_cache import *
+from .module_cache.module_cache import *
 from .common import *
 
 from enum import Enum, auto
-from typing import Optional
+from typing import Optional, List
 
 import torch
 import numpy as np

@@ -3,8 +3,7 @@ from cuda.core.experimental import Device, LaunchConfig, launch
 import torch
 import numpy as np
 
-from .paths import *
-from .module_cache import *
+from .module_cache.module_cache import *
 from .common import *
 
 def cdist_grad(

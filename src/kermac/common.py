@@ -1,19 +1,4 @@
 import torch
-import os
-import hashlib
-
-from cuda.core.experimental import Device
-
-def ceil_div(x, d):
-    return int((x + d - 1) // d)
-
-def get_compute_capability(device) -> str:
-    if isinstance(device, torch.device):
-        pt_device_id = device.index
-        device = Device(pt_device_id)
-    
-    arch = "".join(f"{i}" for i in device.compute_capability)
-    return arch
 
 class PyTorchStreamWrapper:
     def __init__(self, pt_stream):
@@ -22,6 +7,9 @@ class PyTorchStreamWrapper:
     def __cuda_stream__(self):
         stream_id = self.pt_stream.cuda_stream
         return (0, stream_id)  # Return format required by CUDA Python
+
+def ceil_div(x, d):
+    return int((x + d - 1) // d)
 
 def is_tensor_16_byte_aligned(
     a : torch.Tensor
@@ -38,26 +26,3 @@ def is_tensor_16_byte_aligned(
         return False
     
     return True
-
-def hash_cuda_include_files(directory):
-    # Initialize SHA-256 hash object
-    hasher = hashlib.sha256()
-    
-    # Walk through the directory
-    for root, _, files in os.walk(directory):
-        # Sort files for consistent hash across runs
-        for file_name in sorted(files):
-            # Check if file is a text file (e.g., ends with .txt)
-            if file_name.endswith('.cuh'):
-                file_path = os.path.join(root, file_name)
-                try:
-                    # Read file in binary mode
-                    with open(file_path, 'rb') as f:
-                        # Update hash with file contents
-                        while chunk := f.read(8192):  # Read in 8KB chunks
-                            hasher.update(chunk)
-                except (IOError, PermissionError) as e:
-                    print(f"Error reading {file_path}: {e}")
-    
-    # Return the hexadecimal hash
-    return hasher.hexdigest()

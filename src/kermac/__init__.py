@@ -1,7 +1,7 @@
 from .cdist_t import *
 from .cdist_grad import *
 from .build_a_kernel import *
-from .module_cache import *
+from .module_cache.module_cache import *
 
 all = [
     "cdist_t",

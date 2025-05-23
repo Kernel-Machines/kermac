@@ -22,7 +22,7 @@ def _get_top_level_repo_dir(dir) -> Path:
     # directory *beside* the package (wheel layout)
     wheel_copy = files(get_package_name()).parent / dir
     # directory *beside* src/ (editable / repo checkout)
-    repo_copy  = Path(__file__).resolve().parents[2] / dir
+    repo_copy  = Path(__file__).resolve().parents[3] / dir
 
     for path in (repo_copy, wheel_copy):
         if path.is_dir():
