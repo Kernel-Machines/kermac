@@ -132,9 +132,7 @@ def cdist_grad(
     if tensor_device != pt_device:
         raise ValueError("cuda stream must be on the same device as the tensors: got {pt_device}, expected {tensor_device}")
 
-    pt_device_id = pt_device.index
-
-    device = Device(pt_device_id)
+    device = Device(pt_device.index)
 
     device.set_current()
     stream = PyTorchStreamWrapper(pt_stream)

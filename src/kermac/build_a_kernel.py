@@ -221,16 +221,7 @@ def run_kernel(
     if tensor_device != pt_device:
         raise ValueError("cuda stream must be on the same device as the tensors: got {pt_device}, expected {tensor_device}")
 
-    pt_device_id = pt_device.index
-    device = Device(pt_device_id)
-
-    # arch = get_compute_capability(device)
-    # function_names = [
-    #     kernel_descriptor_l1_norm._render_function_name(Alignment.ALIGN_1, Alignment.ALIGN_1),
-    #     kernel_descriptor_l2_norm._render_function_name(Alignment.ALIGN_1, Alignment.ALIGN_1)
-    # ]
-    # device_function_map.pre_compile_and_store_cubin(arch, function_names , debug=debug)
-    # exit()
+    device = Device(pt_device.index)
     
     device.set_current()
     stream = PyTorchStreamWrapper(pt_stream)

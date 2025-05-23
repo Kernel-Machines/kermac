@@ -12,3 +12,5 @@
 
 * Function name -> (lowered_name, cubin_hash)
 * cubin_hash -> cubin
+
+* Figure out how to use multiple cores to compile different kernel functions
