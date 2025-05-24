@@ -15,6 +15,7 @@ def parse_args():
     parser.add_argument('-a','--try_align', default=False, action='store_true', help='Specialize kernel if tensors are 4 element aligned')
     parser.add_argument('-d','--debug', default=False, action='store_true', help='Enable debug output (default: True)')
     parser.add_argument('--skip_numeric_compare', default=False, action='store_true', help='Skip comparing torch and kermac results. Helps avoid memory errors.')
+    parser.add_argument('--skip_torch', default=False, action='store_true', help='Skip running torch version.')
     return parser.parse_args()
 
 def main():
@@ -23,6 +24,7 @@ def main():
     skip_epilogue = args.skip_epilogue
     try_align = args.try_align
     debug = args.debug
+    skip_torch = args.skip_torch
     # debug = True
 
     device = torch.device('cuda')
@@ -70,6 +72,9 @@ def main():
     print(f'Running p-norm={p} with size ({M},{K}) by ({N},{K})')
     print(f"\tkermac.cdist_t \t{timer.stop():.3f} ms")
 
+    if skip_torch:
+        exit()
+        
     timer.start()
     torch_out = torch.cdist(a.T, b.T, p=p).T
     print(f"\ttorch.cdist \t{timer.stop():.3f} ms")

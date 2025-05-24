@@ -38,8 +38,8 @@ cute_build_kernel_m128n128k8p3_impl(
 
     auto prob_shape = make_shape(M,N,K);
 
-    auto dA = make_stride(Int<1>{}, LDA); // (dN, dK) : N-major
-    auto dB = make_stride(Int<1>{}, LDB); // (dM, dK) : M-major
+    auto dA = make_stride(Int<1>{}, LDA); // (dM, dK) : M-major
+    auto dB = make_stride(Int<1>{}, LDB); // (dN, dK) : N-major
     auto dC = make_stride(Int<1>{}, LDC); // (dM, dN) : M-major
 
     auto bM = Int<128>{};

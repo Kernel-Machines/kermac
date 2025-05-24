@@ -1,0 +1,1 @@
+ncu --set full --metrics l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st --kernel-name regex:.*_build_kernel_.* python examples/cdist.py -a -d --skip_torch -m 1024 -n 1024
