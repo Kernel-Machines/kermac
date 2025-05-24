@@ -4,24 +4,6 @@ import torch
 
 from kermac.common import is_tensor_16_byte_aligned
 
-class CudaTimer:
-    def __init__(self):
-        """Initialize the timer, creating start and end CUDA events and recording the start time."""
-        if not torch.cuda.is_available():
-            raise RuntimeError("CUDA is not available")
-        self.start_event = torch.cuda.Event(enable_timing=True)
-        self.end_event = torch.cuda.Event(enable_timing=True)
-    
-    def start(self):
-        """Reset the timer by recording a new start time."""
-        self.start_event.record()
-
-    def stop(self):
-        """Stop the timer, record the end time, and return the elapsed time in milliseconds."""
-        self.end_event.record()
-        self.end_event.synchronize()  # Ensure events are complete
-        return self.start_event.elapsed_time(self.end_event)
-
 def parse_args():
     """Parse command-line arguments for matrix dimensions, p-norm, and flags."""
     parser = argparse.ArgumentParser(description="Run kermac.cdist_t with configurable parameters")
@@ -44,7 +26,7 @@ def main():
     # debug = True
 
     device = torch.device('cuda')
-    timer = CudaTimer()
+    timer = kermac.CudaTimer()
 
     a = torch.randn(K,M,device=device)
     b = torch.randn(K,N,device=device)
