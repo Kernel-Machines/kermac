@@ -4,19 +4,47 @@ import torch
 
 from kermac.common import is_tensor_16_byte_aligned
 
+def parse_col_major_flags(flag_string):
+    # Validate input
+    if not isinstance(flag_string, str) or len(flag_string) != 3 or not all(c in 'nt' for c in flag_string):
+        raise ValueError("Input must be a 3-character string containing only 'n' or 't'")
+
+    # Parse flags and assign to variables
+    a_col_major = flag_string[0] == 'n'
+    b_col_major = flag_string[1] == 't'
+    c_col_major = flag_string[2] == 'n'
+
+    return a_col_major, b_col_major, c_col_major
+
+
 def parse_args():
     """Parse command-line arguments for matrix dimensions, p-norm, and flags."""
     parser = argparse.ArgumentParser(description="Run kermac.cdist_t with configurable parameters")
-    parser.add_argument('-m','--M', type=int, default=30000, help='Number of rows in output matrix (default: 30000)')
-    parser.add_argument('-n','--N', type=int, default=30000, help='Number of columns in output matrix (default: 30000)')
-    parser.add_argument('-k','--K', type=int, default=1024, help='Inner dimension of input matrices (default: 1024)')
-    parser.add_argument('-p','--p', type=float, default=1.0, help='p-norm for distance computation (default: 1.0)')
-    parser.add_argument('-s','--skip_epilogue', default=False, action='store_true', help='Skip epilogue in kermac.cdist_t (default: False)')
-    parser.add_argument('-a','--try_align', default=False, action='store_true', help='Specialize kernel if tensors are 4 element aligned')
-    parser.add_argument('-d','--debug', default=False, action='store_true', help='Enable debug output (default: True)')
+    parser.add_argument('-m', '--M', type=int, default=30000, help='Number of rows in output matrix (default: 30000)')
+    parser.add_argument('-n', '--N', type=int, default=30000, help='Number of columns in output matrix (default: 30000)')
+    parser.add_argument('-k', '--K', type=int, default=1024, help='Inner dimension of input matrices (default: 1024)')
+    parser.add_argument('-p', '--p', type=float, default=1.0, help='p-norm for distance computation (default: 1.0)')
+    parser.add_argument('-s', '--skip_epilogue', default=False, action='store_true', help='Skip epilogue in kermac.cdist_t (default: False)')
+    parser.add_argument('-a', '--try_align', default=False, action='store_true', help='Specialize kernel if tensors are 4 element aligned')
+    parser.add_argument('-d', '--debug', default=False, action='store_true', help='Enable debug output (default: False)')
     parser.add_argument('--skip_numeric_compare', default=False, action='store_true', help='Skip comparing torch and kermac results. Helps avoid memory errors.')
     parser.add_argument('--skip_torch', default=False, action='store_true', help='Skip running torch version.')
-    return parser.parse_args()
+    parser.add_argument('--a_col_major', default=False, action='store_true', help='Make tensor A column-major instead of row-major')
+    parser.add_argument('--b_col_major', default=False, action='store_true', help='Make tensor B column-major instead of row-major')
+    parser.add_argument('--c_col_major', default=False, action='store_true', help='Make tensor C column-major instead of row-major')
+    parser.add_argument('--flags', type=str, default=None, help='3-character string of "n" or "t" to set a_col_major, b_col_major, c_col_major (e.g., "nnt")')
+
+    args = parser.parse_args()
+
+    # If flags is provided, override a_col_major, b_col_major, c_col_major
+    if args.flags is not None:
+        if not isinstance(args.flags, str) or len(args.flags) != 3 or not all(c in 'nt' for c in args.flags):
+            parser.error('The --flags argument must be a 3-character string containing only "n" or "t"')
+        args.a_col_major = args.flags[0] == 'n'
+        args.b_col_major = args.flags[1] == 't'
+        args.c_col_major = args.flags[2] == 'n'
+
+    return args
 
 def main():
     args = parse_args()
@@ -25,25 +53,56 @@ def main():
     try_align = args.try_align
     debug = args.debug
     skip_torch = args.skip_torch
+    a_col_major = args.a_col_major
+    b_col_major = args.b_col_major
+    c_col_major = args.c_col_major
     # debug = True
 
     device = torch.device('cuda')
     timer = kermac.CudaTimer()
 
-    a = torch.randn(K,M,device=device)
-    b = torch.randn(K,N,device=device)
-    kermac_out = torch.zeros(N,M,device=device)
+    # alignment_offset_a = 0 if is_tensor_16_byte_aligned(a) else 1
+    # alignment_offset_b = 0 if is_tensor_16_byte_aligned(b) else 1
+
+    alignment_offset_a = 0 # if is_tensor_16_byte_aligned(a) else 1
+    alignment_offset_b = 0 # if is_tensor_16_byte_aligned(b) else 1
+
+    mini_m = 100
+    mini_n = 100
+    mini_k = 10
+
+    if a_col_major:
+        mini_a = torch.randn(mini_k,mini_m + alignment_offset_a,device=device).T
+        a = torch.randn(K,M,device=device).T
+    else:
+        mini_a = torch.randn(mini_m,mini_k,device=device)
+        a = torch.randn(M,K,device=device)
+
+    if b_col_major:
+        mini_b = torch.randn(mini_k,mini_n + alignment_offset_b,device=device).T
+        b = torch.randn(K,N,device=device).T
+    else:
+        mini_b = torch.randn(mini_m,mini_k + alignment_offset_b,device=device)
+        b = torch.randn(N,K,device=device)
+    
+    if c_col_major:
+        mini_c = torch.randn(mini_n,mini_m,device=device).T
+        c = torch.randn(N,M,device=device).T
+    else:
+        mini_c = torch.randn(mini_m,mini_n,device=device)
+        c = torch.randn(M,N,device=device)
+
+    kermac_out = c
 
     # offset a and/or b for warmup explicitly if a/b sizes are unaligned
     # forces compile during warmup for this special case
-    alignment_offset_a = 0 if is_tensor_16_byte_aligned(a) else 1
-    alignment_offset_b = 0 if is_tensor_16_byte_aligned(b) else 1
 
     if debug: 
-        print('\n(Kermac Debug) Warmup kermac.cdist_t')
-    kermac.cdist_t(
-        torch.randn(10,100 + alignment_offset_a,device=device), # a
-        torch.randn(10,100 + alignment_offset_b,device=device), # b
+        print('\n(Kermac Debug) Warmup kermac.cdist')
+    kermac.cdist(
+        mini_a,
+        mini_b,
+        out=mini_c,
         p=p,
         skip_epilogue=skip_epilogue,
         try_to_align=try_align,
@@ -60,7 +119,7 @@ def main():
     if debug: 
         print('\n(Kermac Debug) Running kermac.cdist_t')
     timer.start()
-    kermac_out = kermac.cdist_t(
+    kermac_out = kermac.cdist(
         a, b, 
         p=p, out=kermac_out,
         skip_epilogue=skip_epilogue,
@@ -74,9 +133,9 @@ def main():
 
     if skip_torch:
         exit()
-        
+
     timer.start()
-    torch_out = torch.cdist(a.T, b.T, p=p).T
+    torch_out = torch.cdist(a, b, p=p)
     print(f"\ttorch.cdist \t{timer.stop():.3f} ms")
 
     if not args.skip_numeric_compare:

@@ -44,6 +44,11 @@ enum class NormType {
     P
 };
 
+enum class Majorness {
+    COL_MAJOR,
+    ROW_MAJOR
+};
+
 enum class Alignment {
     ALIGN_1,
     ALIGN_4

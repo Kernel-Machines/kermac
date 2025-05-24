@@ -25,6 +25,26 @@ class CudaTimer:
         self.end_event.record()
         self.end_event.synchronize()  # Ensure events are complete
         return self.start_event.elapsed_time(self.end_event)
+    
+def check_is_row_major(tensor):
+    # Ensure the tensor is 2D
+    if tensor.dim() != 2:
+        raise ValueError("Input tensor must be 2-dimensional")
+    
+    # Get strides
+    strides = tensor.stride()
+    rows, cols = tensor.size()
+    
+    # Strides for a 2D tensor: (stride for rows, stride for columns)
+    stride_row, stride_col = strides
+    
+    # Check memory layout based on strides
+    if stride_col == 1 and stride_row >= cols:
+        return True
+    elif stride_row == 1 and stride_col >= rows:
+        return False
+    else:
+        raise ValueError(f"Tensor has non-standard memory layout: strides={strides}, shape=({rows}, {cols})")
 
 def ceil_div(x, d):
     return int((x + d - 1) // d)

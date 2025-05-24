@@ -9,6 +9,9 @@ from typing import Optional, List
 import torch
 import numpy as np
 
+class Majorness(Enum):
+    COL_MAJOR = auto()
+    ROW_MAJOR = auto()
 # For templates to dictate whether
 # an input tensor is aligned to 16 Bytes (4 float elements)
 class Alignment(Enum):
@@ -56,17 +59,24 @@ class KernelDescriptor():
     
     def _render_function_name(
       self,
+      majorness_A,
+      majorness_B,
+      majorness_C,
       align_A,
       align_B,
     ):
-        kernel_name_str = f'cute_build_kernel_m128n128k8p3'
+        kernel_name_str = f'cute_build_kernel'
+        majorness_A_str = 'n' if majorness_A == Majorness.COL_MAJOR else 't'
+        majorness_B_str = 't' if majorness_B == Majorness.COL_MAJOR else 'n'
+        majorness_C_str = 'n' if majorness_C == Majorness.COL_MAJOR else 't'
+        majorness_str = f'{majorness_A_str}{majorness_B_str}{majorness_C_str}'
         inner_operator_str = f'InnerOperator::{self._inner_operator.name}'
         inner_power_str = f'PowerType::{self._inner_power.name}'
         outer_power_str = f'PowerType::{self._outer_power.name}'
         kernel_type_str = f'KernelType::{self._kernel_type.name}'
         align_A_str = f'Alignment::{align_A.name}'
         align_B_str = f'Alignment::{align_B.name}'
-        function_name = f'{kernel_name_str}<{inner_operator_str},{inner_power_str},{outer_power_str},{kernel_type_str},{align_A_str},{align_B_str}>'
+        function_name = f'{kernel_name_str}_{majorness_str}<{inner_operator_str},{inner_power_str},{outer_power_str},{kernel_type_str},{align_A_str},{align_B_str}>'
         return function_name
 
 kernel_descriptor_laplace_l1 = \
@@ -216,8 +226,8 @@ def run_kernel(
         raise ValueError(f"out must be on the same CUDA device as inputs: got {out.device}, expected {tensor_device}")
 
     # Get shapes
-    K_a, M = a.shape
-    K_b, N = b.shape
+    M, K_a = a.shape
+    N, K_b = b.shape
 
     # Check shape consistency
     if K_a != K_b:
@@ -225,20 +235,12 @@ def run_kernel(
     
     K = K_a
 
-    # Check strides (stride 1 in last dimension)
-    if a.stride(1) != 1:
-        raise ValueError("a must have stride 1 in dimension M (last dimension)")
-    if b.stride(1) != 1:
-        raise ValueError("b must have stride 1 in dimension N (last dimension)")
-    if out is not None and out.stride(1) != 1:
-        raise ValueError("out must have stride 1 in dimension M (last dimension)")
-
     # Check output shape if provided
     if out is not None:
-        if out.shape != (N, M):
-            raise ValueError(f"out must have shape (N={N}, M={M}), got {out.shape}")
+        if out.shape != (M, N):
+            raise ValueError(f"out must have shape (M={M}, N={N}), got {out.shape}")
 
-    result = torch.zeros((N, M), dtype=torch.float32, device=a.device) if out is None else out
+    result = torch.zeros((M, N), dtype=torch.float32, device=a.device) if out is None else out
 
     module_cache = ModuleCache(debug)
    
@@ -251,10 +253,13 @@ def run_kernel(
     if tensor_device != pt_device:
         raise ValueError("cuda stream must be on the same device as the tensors: got {pt_device}, expected {tensor_device}")
 
-    align_4_A = Alignment.ALIGN_4 if try_to_align and is_tensor_16_byte_aligned(a) else Alignment.ALIGN_1
-    align_4_B = Alignment.ALIGN_4 if try_to_align and is_tensor_16_byte_aligned(b) else Alignment.ALIGN_1
+    majorness_A = Majorness.ROW_MAJOR if check_is_row_major(a) else Majorness.COL_MAJOR
+    majorness_B = Majorness.ROW_MAJOR if check_is_row_major(b) else Majorness.COL_MAJOR
+    majorness_C = Majorness.ROW_MAJOR if check_is_row_major(result) else Majorness.COL_MAJOR
+    align_4_A = Alignment.ALIGN_1 # Alignment.ALIGN_4 if majorness_A == Majorness.COL_MAJOR and try_to_align and is_tensor_16_byte_aligned(a) else Alignment.ALIGN_1
+    align_4_B = Alignment.ALIGN_1 # Alignment.ALIGN_4 if majorness_A == Majorness.COL_MAJOR and try_to_align and is_tensor_16_byte_aligned(b) else Alignment.ALIGN_1
 
-    function_name = kernel_descriptor._render_function_name(align_4_A, align_4_B)
+    function_name = kernel_descriptor._render_function_name(majorness_A, majorness_B, majorness_C, align_4_A, align_4_B)
 
     kernel = module_cache.get_function(device, function_name, debug=debug)
 
@@ -270,9 +275,9 @@ def run_kernel(
 
     grid = (num_blocks_M, num_blocks_N, 1)
     config = LaunchConfig(grid=grid, block=block)
-    ld_a = a.stride(0)
-    ld_b = b.stride(0)
-    ld_c = result.stride(0)
+    ld_a = max(a.stride(0),a.stride(1))
+    ld_b = max(b.stride(0),b.stride(1))
+    ld_c = max(result.stride(0),result.stride(1))
 
     kernel_args = (
         M, N, K,

@@ -1,23 +1,22 @@
 from cuda.core.experimental import Device, LaunchConfig, launch
 
 import torch
-import numpy as np
 
 from .module_cache.module_cache import *
 from .common import *
 from .build_a_kernel import *
 
-def cdist_t(
-    a : torch.Tensor,           # [K,M] # M-major
-    b : torch.Tensor,           # [K,N] # N-major
-    out : torch.Tensor = None,  # [N,M] # M-major
+def cdist(
+    a : torch.Tensor,
+    b : torch.Tensor,
+    out : torch.Tensor = None,
     p : float = 2.0,
     skip_epilogue : bool = False,
     try_to_align : bool = False,
     debug = False
 ):
     """
-    Computes a cdist on transposed tensors with input validation with CUDA.
+    Computes a cdist with input validation with CUDA.
 
     Computes (efficiently):
     ``` c
