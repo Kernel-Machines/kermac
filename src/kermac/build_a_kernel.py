@@ -147,15 +147,32 @@ def pre_compile_descriptors(
     if try_to_align:
         if debug:
             print('(Kermac Debug) Because `try_to_align` is set, generating full matrix of alignment conditions')
-        for descriptor in descriptors:
-            for align_A in Alignment:
-                for align_B in Alignment:
-                    function_names.append(descriptor._render_function_name(align_A=align_A, align_B=align_B))
-    else:
-        if debug:
-            print('(Kermac Debug) Because `try_to_align` is not set, generating only Align_1 conditions')
-        for descriptor in descriptors:
-            function_names.append(descriptor._render_function_name(align_A=Alignment.ALIGN_1, align_B=Alignment.ALIGN_1))
+
+    for descriptor in descriptors:
+        for majorness_A in Majorness:
+            for majorness_B in Majorness:
+                if try_to_align:
+                    for align_A in Alignment:
+                        for align_B in Alignment:
+                            function_names.append(
+                                descriptor._render_function_name(
+                                    majorness_A=majorness_A,
+                                    majorness_B=majorness_B,
+                                    majorness_C=Majorness.COL_MAJOR,
+                                    align_A=align_A, 
+                                    align_B=align_B
+                                )
+                            )
+                else:
+                    function_names.append(
+                        descriptor._render_function_name(
+                            majorness_A=majorness_A,
+                            majorness_B=majorness_B,
+                            majorness_C=Majorness.COL_MAJOR,
+                            align_A=Alignment.ALIGN_1, 
+                            align_B=Alignment.ALIGN_1
+                        )
+                    )
 
     module_cache = ModuleCache(debug)
     module_cache.compile_and_cache_functions(

@@ -5,8 +5,8 @@ import kermac
 def parse_args():
     """Parse command-line arguments for matrix dimensions, p-norm, and flags."""
     parser = argparse.ArgumentParser(description="Run kermac.cdist_t with configurable parameters")
-    parser.add_argument('-m','--M', type=int, default=30000, help='Number of rows in output matrix (default: 30000)')
-    parser.add_argument('-n','--N', type=int, default=30000, help='Number of columns in output matrix (default: 30000)')
+    parser.add_argument('-m','--M', type=int, default=10000, help='Number of rows in output matrix (default: 10000)')
+    parser.add_argument('-n','--N', type=int, default=10000, help='Number of columns in output matrix (default: 10000)')
     parser.add_argument('-k','--K', type=int, default=1024, help='Inner dimension of input matrices (default: 1024)')
     parser.add_argument('-a','--try_align', default=False, action='store_true', help='Specialize kernel if tensors are 4 element aligned')
     parser.add_argument('-d','--debug', default=False, action='store_true', help='Enable debug output (default: True)')
@@ -21,9 +21,9 @@ def main():
     skip_torch = args.skip_torch
 
     device = torch.device('cuda')
-    a = torch.randn(K,M,device=device)
-    b = torch.randn(K,N,device=device)
-    out = torch.zeros(N,M,device=device)
+    a = torch.randn(M,K,device=device)
+    b = torch.randn(N,K,device=device)
+    out = torch.zeros(M,N,device=device)
 
     # Example of a custom non-predefined kernel
     # Because it uses PowerType.POW it will require a `p=` in the argument list for `run_kernel`
@@ -128,7 +128,7 @@ def main():
 
     if not skip_torch:
         print('torch.cdist L1')
-        print(torch.cdist(a.T,b.T,p=1.0).T)
+        print(torch.cdist(a,b,p=1.0))
 
     print('Running MMA')
     kermac.run_kernel(
@@ -144,7 +144,7 @@ def main():
 
     if not skip_torch:
         print('torch MMA')
-        print((a.T @ b).T)
+        print((a @ b.T))
 
 if __name__ == '__main__':
     main()
