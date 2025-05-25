@@ -35,7 +35,7 @@ __device__
 __forceinline__
 void
 kernel_cute_build_kernel(
-    ProblemShape shape_MNK, CtaTiler cta_tiler, ThreadTiler thread_tiler,
+    ProblemShape shape_MNKL, CtaTiler cta_tiler, ThreadTiler thread_tiler,
     T const *A, AStride dA, ASmemLayout sA_layout, TiledCopyA copy_a,
     T const *B, BStride dB, BSmemLayout sB_layout, TiledCopyB copy_b,
     T       *C, CStride dC, CSmemLayout,
@@ -46,7 +46,7 @@ kernel_cute_build_kernel(
     using namespace cute;
 
     // Preconditions
-    CUTE_STATIC_ASSERT_V(rank(shape_MNK) == Int<3>{}); // (M, N, K)
+    CUTE_STATIC_ASSERT_V(rank(shape_MNKL) == Int<4>{}); // (M, N, K, L)
     CUTE_STATIC_ASSERT_V(rank(cta_tiler) == Int<3>{}); // (BLK_M, BLK_N, BLK_K)
     CUTE_STATIC_ASSERT_V(rank(thread_tiler) == Int<2>{}); // (THR_M, THR_N)
 
@@ -66,23 +66,27 @@ kernel_cute_build_kernel(
     CUTE_STATIC_ASSERT_V(size<1>(ASmemLayout{}) == size<2>(cta_tiler));  // BLK_K
     CUTE_STATIC_ASSERT_V(size<1>(BSmemLayout{}) == size<2>(cta_tiler));  // BLK_K
 
-    CUTE_STATIC_ASSERT_V(congruent(select<0,2>(shape_MNK), dA));       // dA strides for shape MK
-    CUTE_STATIC_ASSERT_V(congruent(select<1,2>(shape_MNK), dB));       // dB strides for shape NK
-    CUTE_STATIC_ASSERT_V(congruent(select<0,1>(shape_MNK), dC));       // dC strides for shape MNO
+    CUTE_STATIC_ASSERT_V(congruent(select<0,2,3>(shape_MNKL), dA));       // dA strides for shape MK
+    CUTE_STATIC_ASSERT_V(congruent(select<1,2,3>(shape_MNKL), dB));       // dB strides for shape NK
+    CUTE_STATIC_ASSERT_V(congruent(select<0,1,3>(shape_MNKL), dC));       // dC strides for shape MNO
 
     // Represent the full tensors
-    Tensor mA = make_tensor(make_gmem_ptr(A), select<0,2>(shape_MNK), dA); // (M,K)
-    Tensor mB = make_tensor(make_gmem_ptr(B), select<1,2>(shape_MNK), dB); // (N,K)
-    Tensor mC = make_tensor(make_gmem_ptr(C), select<0,1>(shape_MNK), dC); // (M,N)
+    Tensor mA = make_tensor(make_gmem_ptr(A), select<0,2,3>(shape_MNKL), dA); // (M,K,L)
+    Tensor mB = make_tensor(make_gmem_ptr(B), select<1,2,3>(shape_MNKL), dB); // (N,K,L)
+    Tensor mC = make_tensor(make_gmem_ptr(C), select<0,1,3>(shape_MNKL), dC); // (M,N,L)
 
-    auto cta_coord = make_coord(blockIdx.x, blockIdx.y, _); // (m,n,k)
-    Tensor gA = local_tile(mA, cta_tiler, cta_coord, Step<_1,  X, _1>{}); // (BLK_M,BLK_K,k)
-    Tensor gB = local_tile(mB, cta_tiler, cta_coord, Step< X, _1, _1>{}); // (BLK_N,BLK_K,k)
-    Tensor gC = local_tile(mC, cta_tiler, cta_coord, Step<_1, _1,  X>{}); // (BLK_M,BLK_N)
+    auto bidx = blockIdx.x;
+    auto bidy = blockIdx.y;
+    auto bidz = blockIdx.z;
 
-    auto m_max_coord = size<0>(shape_MNK) - size<0>(gA) * blockIdx.x;  // M - BLK_M * m_coord
-    auto n_max_coord = size<1>(shape_MNK) - size<0>(gB) * blockIdx.y;  // N - BLK_N * n_coord
-    auto k_residue   = size<2>(shape_MNK) - size<1>(gA) * size<2>(gA); // K - BLK_K * k_coord_max
+    auto cta_coord = make_coord(bidx, bidy, _); // (m,n,k)
+    Tensor gA = local_tile(mA(_,_,bidz), cta_tiler, cta_coord, Step<_1,  X, _1>{}); // (BLK_M,BLK_K,k)
+    Tensor gB = local_tile(mB(_,_,bidz), cta_tiler, cta_coord, Step< X, _1, _1>{}); // (BLK_N,BLK_K,k)
+    Tensor gC = local_tile(mC(_,_,bidz), cta_tiler, cta_coord, Step<_1, _1,  X>{}); // (BLK_M,BLK_N)
+
+    auto m_max_coord = size<0>(shape_MNKL) - size<0>(gA) * bidx;  // M - BLK_M * m_coord
+    auto n_max_coord = size<1>(shape_MNKL) - size<0>(gB) * bidy;  // N - BLK_N * n_coord
+    auto k_residue   = size<2>(shape_MNKL) - size<1>(gA) * size<2>(gA); // K - BLK_K * k_coord_max
 
     // Need to get the tile count before the offsetting in gA, gB of the k_residue
     int k_tile_count = 0;

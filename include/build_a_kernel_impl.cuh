@@ -20,11 +20,11 @@ __device__
 __forceinline__
 void
 cute_build_kernel(
-    int m, int n, int k,
-    T const *A, u64 ldA,
-    T const *B, u64 ldB,
-    T *C, u64 ldC,
-    T p_power_inner, 
+    int m, int n, int k, int l,
+    T const *A, u64 ldA, u64 batch_stride_A,
+    T const *B, u64 ldB, u64 batch_stride_B,
+    T       *C, u64 ldC, u64 batch_stride_C,
+    T p_power_inner,
     T p_power_outer,
     T bandwidth
 ) {
@@ -37,6 +37,7 @@ cute_build_kernel(
     auto M = u64(m);
     auto N = u64(n);
     auto K = u64(k);
+    auto L = u64(l);
 
     auto bM = Int<128>{};
     auto bN = Int<128>{};
@@ -44,22 +45,22 @@ cute_build_kernel(
     auto cta_tiler = make_shape(bM, bN, bK);
     auto bP = Int<3>{};
 
-    auto prob_shape = make_shape(M,N,K);
-    auto dA = [ldA] { 
+    auto prob_shape = make_shape(M,N,K,L);
+    auto dA = [ldA, batch_stride_A] { 
         if constexpr(majorness_A == Majorness::COL_MAJOR) {
-            return make_stride(Int<1>{}, ldA);
+            return make_stride(Int<1>{}, ldA, batch_stride_A);
         } else {
-            return make_stride(ldA, Int<1>{});
+            return make_stride(ldA, Int<1>{}, batch_stride_A);
         }
     }();
-    auto dB = [ldB] { 
+    auto dB = [ldB, batch_stride_B] { 
         if constexpr (majorness_B == Majorness::COL_MAJOR) {
-            return make_stride(Int<1>{}, ldB);
+            return make_stride(Int<1>{}, ldB, batch_stride_B);
         } else {
-            return make_stride(ldB, Int<1>{});
+            return make_stride(ldB, Int<1>{}, batch_stride_B);
         }
     }();
-    auto dC = make_stride(Int<1>{}, ldC);
+    auto dC = make_stride(Int<1>{}, ldC, batch_stride_C);
 
     auto sA = [bM,bK,bP] {
         if constexpr (majorness_A == Majorness::COL_MAJOR) {
@@ -168,10 +169,10 @@ __global__
 __launch_bounds__(256)
 void
 cute_build_kernel(
-    int m, int n, int k,
-    float const *A, u64 ldA,
-    float const *B, u64 ldB,
-    float *C, u64 ldC,
+    int m, int n, int k, int l,
+    float const *A, u64 ldA, u64 batch_stride_A,
+    float const *B, u64 ldB, u64 batch_stride_B,
+    float       *C, u64 ldC, u64 batch_stride_C,
     float p_power_inner, 
     float p_power_outer,
     float bandwidth
@@ -187,10 +188,10 @@ cute_build_kernel(
         align_A, 
         align_B
     >(
-        m,n,k,
-        A, ldA,
-        B, ldB,
-        C, ldC,
+        m,n,k,l,
+        A, ldA, batch_stride_A,
+        B, ldB, batch_stride_B,
+        C, ldC, batch_stride_C,
         p_power_inner,
         p_power_outer,
         bandwidth
