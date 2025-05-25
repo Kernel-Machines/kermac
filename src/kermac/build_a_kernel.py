@@ -61,31 +61,21 @@ class KernelDescriptor():
       self,
       majorness_A,
       majorness_B,
-      majorness_C,
       align_A,
       align_B,
     ):
-        if majorness_C == Majorness.ROW_MAJOR:
-            # flip if output tensor is row major
-            return self._render_function_name(
-                majorness_A=majorness_B,
-                majorness_B=majorness_A,
-                majorness_C=Majorness.COL_MAJOR,
-                align_A=align_B,
-                align_B=align_A
-            )
-            
-        kernel_name_str = f'cute_build_kernel'
-        majorness_A_str = 'n' if majorness_A == Majorness.COL_MAJOR else 't'
-        majorness_B_str = 't' if majorness_B == Majorness.COL_MAJOR else 'n'
-        majorness_str = f'{majorness_A_str}{majorness_B_str}'
-        inner_operator_str = f'InnerOperator::{self._inner_operator.name}'
-        inner_power_str = f'PowerType::{self._inner_power.name}'
-        outer_power_str = f'PowerType::{self._outer_power.name}'
-        kernel_type_str = f'KernelType::{self._kernel_type.name}'
-        align_A_str = f'Alignment::{align_A.name}'
-        align_B_str = f'Alignment::{align_B.name}'
-        function_name = f'{kernel_name_str}_{majorness_str}<{inner_operator_str},{inner_power_str},{outer_power_str},{kernel_type_str},{align_A_str},{align_B_str}>'
+        kernel_name_str = 'cute_build_kernel'
+        template_parameters = [
+            f'InnerOperator::{self._inner_operator.name}',
+            f'PowerType::{self._inner_power.name}',
+            f'PowerType::{self._outer_power.name}',
+            f'KernelType::{self._kernel_type.name}',
+            f'Majorness::{majorness_A.name}',
+            f'Majorness::{majorness_B.name}',
+            f'Alignment::{align_A.name}',
+            f'Alignment::{align_B.name}'
+        ]
+        function_name = f'{kernel_name_str}<{",".join(template_parameters)}>'
         return function_name
 
 kernel_descriptor_laplace_l1 = \
@@ -278,24 +268,33 @@ def run_kernel(
 
     if tensor_device != pt_device:
         raise ValueError("cuda stream must be on the same device as the tensors: got {pt_device}, expected {tensor_device}")
+    
+    majorness_C = Majorness.ROW_MAJOR if check_is_row_major(result) else Majorness.COL_MAJOR
+    if majorness_C == Majorness.ROW_MAJOR:
+        # Swap arguments if output tensor is row major
+        # Kernel will dispatch to version with output as col major
+        temp_M = M
+        M = N
+        N = temp_M
+        temp_a = a
+        a = b
+        b = temp_a
 
     majorness_A = Majorness.ROW_MAJOR if check_is_row_major(a) else Majorness.COL_MAJOR
     majorness_B = Majorness.ROW_MAJOR if check_is_row_major(b) else Majorness.COL_MAJOR
-    majorness_C = Majorness.ROW_MAJOR if check_is_row_major(result) else Majorness.COL_MAJOR
     align_4_A = Alignment.ALIGN_1 # Alignment.ALIGN_4 if majorness_A == Majorness.COL_MAJOR and try_to_align and is_tensor_16_byte_aligned(a) else Alignment.ALIGN_1
     align_4_B = Alignment.ALIGN_1 # Alignment.ALIGN_4 if majorness_A == Majorness.COL_MAJOR and try_to_align and is_tensor_16_byte_aligned(b) else Alignment.ALIGN_1
+    bM = 128
+    bN = 128
 
-    function_name = kernel_descriptor._render_function_name(majorness_A, majorness_B, majorness_C, align_4_A, align_4_B)
+    block = 256
 
+    function_name = kernel_descriptor._render_function_name(majorness_A, majorness_B, align_4_A, align_4_B)
     kernel = module_cache.get_function(device, function_name, debug=debug)
 
     if debug:
         print(f'(Kermac Debug) Launching kernel: {function_name}')
 
-    bM = 128
-    bN = 128
-
-    block = 256
     num_blocks_M = ceil_div(M, bM)
     num_blocks_N = ceil_div(N, bN)
 
@@ -305,26 +304,15 @@ def run_kernel(
     ld_b = max(b.stride(0),b.stride(1))
     ld_c = max(result.stride(0),result.stride(1))
 
-    if majorness_C == Majorness.COL_MAJOR:
-        kernel_args = (
-            M, N, K,
-            a.data_ptr(), ld_a,
-            b.data_ptr(), ld_b,
-            result.data_ptr(), ld_c,
-            np.float32(inner_p),
-            np.float32(outer_p),
-            np.float32(bandwidth)
-        )
-    else:
-        kernel_args = (
-            N, M, K,
-            b.data_ptr(), ld_b,
-            a.data_ptr(), ld_a,
-            result.data_ptr(), ld_c,
-            np.float32(inner_p),
-            np.float32(outer_p),
-            np.float32(bandwidth)
-        )
+    kernel_args = (
+        M, N, K,
+        a.data_ptr(), ld_a,
+        b.data_ptr(), ld_b,
+        result.data_ptr(), ld_c,
+        np.float32(inner_p),
+        np.float32(outer_p),
+        np.float32(bandwidth)
+    )
 
     launch(stream, config, kernel, *kernel_args)
 

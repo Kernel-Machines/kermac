@@ -109,8 +109,8 @@ def main():
         debug=debug
     )
     torch.cdist(
-        torch.randn(10,100,device=device), # a
-        torch.randn(10,100,device=device), # b
+        mini_a,
+        mini_b,
         p=p
     )
 
