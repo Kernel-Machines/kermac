@@ -49,7 +49,6 @@ def main():
     if debug:
         print('(Kermac Debug) Bulk compiling kernels')
         print('(Kermac Debug) Choosing architecture from cuda device 0')
-        print('(Kermac Debug) Pre compiling a bunch of kernels')
     kermac.pre_compile_descriptors(
         device=device,
         descriptors=descriptors,
