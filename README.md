@@ -39,7 +39,7 @@ print(c)
 ```
 
 ### Examples
-To run `kermac.cdist_c`:
+To run `kermac.cdist`:
 ``` bash
 wget https://raw.githubusercontent.com/Kernel-Machines/kermac/refs/heads/master/examples/cdist.py
 python cdist.py -d -p 1.0
