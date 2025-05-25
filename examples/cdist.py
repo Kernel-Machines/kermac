@@ -8,6 +8,7 @@ def parse_args():
     parser.add_argument('-m', '--M', type=int, default=10000, help='Number of rows in output matrix (default: 10000)')
     parser.add_argument('-n', '--N', type=int, default=10000, help='Number of columns in output matrix (default: 10000)')
     parser.add_argument('-k', '--K', type=int, default=1024, help='Inner dimension of input matrices (default: 1024)')
+    parser.add_argument('-l', '--L', type=int, default=2, help='Number of batches (default: 2)')
     parser.add_argument('-p', '--p', type=float, default=1.0, help='p-norm for distance computation (default: 1.0)')
     parser.add_argument('-s', '--skip_epilogue', default=False, action='store_true', help='Skip epilogue in kermac.cdist_t (default: False)')
     parser.add_argument('-a', '--try_align', default=False, action='store_true', help='Specialize kernel if tensors are 4 element aligned')
@@ -36,7 +37,7 @@ def parse_args():
 
 def main():
     a_col_major, b_col_major, c_col_major, args = parse_args()
-    M, N, K, p = args.M, args.N, args.K, args.p
+    M, N, K, L, p = args.M, args.N, args.K, args.L, args.p
     skip_epilogue = args.skip_epilogue
     try_align = args.try_align
     debug = args.debug
@@ -47,9 +48,9 @@ def main():
     device = torch.device('cuda')
     timer = kermac.CudaTimer()
 
-    a = torch.randn(K,M,device=device).T if a_col_major else torch.randn(M,K,device=device)
-    b = torch.randn(K,N,device=device).T if b_col_major else torch.randn(N,K,device=device)
-    c = torch.randn(N,M,device=device).T if c_col_major else torch.randn(M,N,device=device)
+    a = torch.randn(L,K,M,device=device).permute(0,2,1) if a_col_major else torch.randn(L,M,K,device=device)
+    b = torch.randn(L,K,N,device=device).permute(0,2,1) if b_col_major else torch.randn(L,N,K,device=device)
+    c = torch.randn(L,N,M,device=device).permute(0,2,1) if c_col_major else torch.randn(L,M,N,device=device)
 
     kermac_out = c
 
@@ -81,7 +82,7 @@ def main():
             try_to_align=try_align,
             debug=debug
         )
-    print(f'Running {iterations} iterations of p-norm={p} with size ({M},{K}) by ({N},{K})')
+    print(f'Running {iterations} iterations of p-norm={p} with size ({L},{M},{K}) by ({L},{N},{K})')
     print(f"\tkermac.cdist \t{timer.stop() / iterations:.3f} ms / iteration")
 
     if skip_torch:

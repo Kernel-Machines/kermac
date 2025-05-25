@@ -10,6 +10,7 @@ class TestCDist(unittest.TestCase):
         self.M = 100  # Smaller sizes for faster tests
         self.N = 100
         self.K = 64
+        self.L = 2
         self.p_values = [1.0, 1.3, 2.0]  # p-norm values to test
         self.try_to_align_values = [False, True]  # try_to_align values to test
         self.atol = 1e-4  # Absolute tolerance for numerical comparison
@@ -31,9 +32,9 @@ class TestCDist(unittest.TestCase):
 
     def _create_tensors(self, a_col_major, b_col_major, c_col_major):
         """Create input and output tensors based on transpose flags."""
-        a = torch.randn(self.K, self.M, device=self.device).T if a_col_major else torch.randn(self.M, self.K, device=self.device)
-        b = torch.randn(self.K, self.N, device=self.device).T if b_col_major else torch.randn(self.N, self.K, device=self.device)
-        c = torch.randn(self.N, self.M, device=self.device).T if c_col_major else torch.randn(self.M, self.N, device=self.device)
+        a = torch.randn(self.L, self.K, self.M, device=self.device).permute(0,2,1) if a_col_major else torch.randn(self.L, self.M, self.K, device=self.device)
+        b = torch.randn(self.L, self.K, self.N, device=self.device).permute(0,2,1) if b_col_major else torch.randn(self.L, self.N, self.K, device=self.device)
+        c = torch.randn(self.L, self.N, self.M, device=self.device).permute(0,2,1) if c_col_major else torch.randn(self.L, self.M, self.N, device=self.device)
         return a, b, c
 
     def _compare_outputs(self, kermac_out, torch_out):
