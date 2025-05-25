@@ -2,7 +2,7 @@ import argparse
 import kermac
 import torch
 
-from kermac.common import is_tensor_16_byte_aligned
+from kermac.common import tensor_stats, Alignment
 
 def parse_col_major_flags(flag_string):
     # Validate input
@@ -61,57 +61,23 @@ def main():
     device = torch.device('cuda')
     timer = kermac.CudaTimer()
 
-    # alignment_offset_a = 0 if is_tensor_16_byte_aligned(a) else 1
-    # alignment_offset_b = 0 if is_tensor_16_byte_aligned(b) else 1
-
-    alignment_offset_a = 0 # if is_tensor_16_byte_aligned(a) else 1
-    alignment_offset_b = 0 # if is_tensor_16_byte_aligned(b) else 1
-
-    mini_m = 100
-    mini_n = 100
-    mini_k = 10
-
-    if a_col_major:
-        mini_a = torch.randn(mini_k,mini_m + alignment_offset_a,device=device).T
-        a = torch.randn(K,M,device=device).T
-    else:
-        mini_a = torch.randn(mini_m,mini_k,device=device)
-        a = torch.randn(M,K,device=device)
-
-    if b_col_major:
-        mini_b = torch.randn(mini_k,mini_n + alignment_offset_b,device=device).T
-        b = torch.randn(K,N,device=device).T
-    else:
-        mini_b = torch.randn(mini_m,mini_k + alignment_offset_b,device=device)
-        b = torch.randn(N,K,device=device)
-    
-    if c_col_major:
-        mini_c = torch.randn(mini_n,mini_m,device=device).T
-        c = torch.randn(N,M,device=device).T
-    else:
-        mini_c = torch.randn(mini_m,mini_n,device=device)
-        c = torch.randn(M,N,device=device)
+    a = torch.randn(K,M,device=device).T if a_col_major else torch.randn(M,K,device=device)
+    b = torch.randn(K,N,device=device).T if b_col_major else torch.randn(N,K,device=device)
+    c = torch.randn(N,M,device=device).T if c_col_major else torch.randn(M,N,device=device)
 
     kermac_out = c
-
-    # offset a and/or b for warmup explicitly if a/b sizes are unaligned
-    # forces compile during warmup for this special case
 
     if debug: 
         print('\n(Kermac Debug) Warmup kermac.cdist')
     kermac.cdist(
-        mini_a,
-        mini_b,
-        out=mini_c,
-        p=p,
+        a, b, 
+        p=p, out=kermac_out,
         skip_epilogue=skip_epilogue,
         try_to_align=try_align,
         debug=debug
     )
     torch.cdist(
-        mini_a,
-        mini_b,
-        p=p
+        a, b, p=p
     )
 
     torch.cuda.synchronize()

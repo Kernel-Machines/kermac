@@ -9,15 +9,6 @@ from typing import Optional, List
 import torch
 import numpy as np
 
-class Majorness(Enum):
-    COL_MAJOR = auto()
-    ROW_MAJOR = auto()
-# For templates to dictate whether
-# an input tensor is aligned to 16 Bytes (4 float elements)
-class Alignment(Enum):
-    ALIGN_1 = auto()
-    ALIGN_4 = auto()
-
 # For templates to dictate the type of
 # contraction operation
 class InnerOperator(Enum):
@@ -280,10 +271,10 @@ def run_kernel(
         a = b
         b = temp_a
 
-    majorness_A = Majorness.ROW_MAJOR if check_is_row_major(a) else Majorness.COL_MAJOR
-    majorness_B = Majorness.ROW_MAJOR if check_is_row_major(b) else Majorness.COL_MAJOR
-    align_4_A = Alignment.ALIGN_1 # Alignment.ALIGN_4 if majorness_A == Majorness.COL_MAJOR and try_to_align and is_tensor_16_byte_aligned(a) else Alignment.ALIGN_1
-    align_4_B = Alignment.ALIGN_1 # Alignment.ALIGN_4 if majorness_A == Majorness.COL_MAJOR and try_to_align and is_tensor_16_byte_aligned(b) else Alignment.ALIGN_1
+    majorness_A, align_4_A = tensor_stats(a)
+    majorness_B, align_4_B = tensor_stats(b)
+    align_4_A = Alignment.ALIGN_1 if not try_to_align else align_4_A
+    align_4_B = Alignment.ALIGN_1 if not try_to_align else align_4_B
     bM = 128
     bN = 128
 

@@ -1,4 +1,14 @@
 import torch
+from enum import Enum, auto
+
+class Majorness(Enum):
+    COL_MAJOR = auto()
+    ROW_MAJOR = auto()
+# For templates to dictate whether
+# an input tensor is aligned to 16 Bytes (4 float elements)
+class Alignment(Enum):
+    ALIGN_1 = auto()
+    ALIGN_4 = auto()
 
 class PyTorchStreamWrapper:
     def __init__(self, pt_stream):
@@ -64,3 +74,35 @@ def is_tensor_16_byte_aligned(
         return False
     
     return True
+
+def tensor_stats(
+    tensor : torch.Tensor
+):
+    if tensor.dim() != 2:
+        raise ValueError("Input tensor must be 2-dimensional")
+
+    if tensor.dtype != torch.float32:
+        raise TypeError("a must have dtype torch.float32")
+    
+    stride_row, stride_col = tensor.stride()
+    num_rows, num_cols = tensor.size()
+
+    if stride_col == 1 and stride_row >= num_cols:
+        majorness = Majorness.ROW_MAJOR
+    elif stride_row == 1 and stride_col >= num_rows:
+        majorness = Majorness.COL_MAJOR
+    else:
+        raise ValueError(f"Tensor has non-standard memory layout: strides={tensor.stride()}, shape=({num_rows}, {num_cols})")
+
+    alignment_requirement_bytes = 16
+    alignment_requirement_elements = 4
+
+    leading_dimension_index = 0 if majorness == Majorness.ROW_MAJOR else 1
+    leading_dimension = tensor.stride(leading_dimension_index)
+
+    is_starting_pointer_aligned = tensor.data_ptr() % alignment_requirement_bytes == 0
+    is_leading_dimension_aligned =leading_dimension % alignment_requirement_elements == 0
+
+    alignment = Alignment.ALIGN_4 if is_starting_pointer_aligned and is_leading_dimension_aligned else Alignment.ALIGN_1
+    
+    return majorness, alignment
