@@ -32,8 +32,8 @@ import kermac
 import torch
 
 device = torch.device('cuda')
-a = torch.randn(100,10)
-b = torch.randn(100,10)
+a = torch.randn(100,10,device=device)
+b = torch.randn(100,10,device=device)
 c = kermac.cdist(a,b)
 print(c)
 ```
