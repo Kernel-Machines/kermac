@@ -65,11 +65,20 @@ class KernelDescriptor():
       align_A,
       align_B,
     ):
+        if majorness_C == Majorness.ROW_MAJOR:
+            # flip if output tensor is row major
+            return self._render_function_name(
+                majorness_A=majorness_B,
+                majorness_B=majorness_A,
+                majorness_C=Majorness.COL_MAJOR,
+                align_A=align_B,
+                align_B=align_A
+            )
+            
         kernel_name_str = f'cute_build_kernel'
         majorness_A_str = 'n' if majorness_A == Majorness.COL_MAJOR else 't'
         majorness_B_str = 't' if majorness_B == Majorness.COL_MAJOR else 'n'
-        majorness_C_str = 'n' if majorness_C == Majorness.COL_MAJOR else 't'
-        majorness_str = f'{majorness_A_str}{majorness_B_str}{majorness_C_str}'
+        majorness_str = f'{majorness_A_str}{majorness_B_str}'
         inner_operator_str = f'InnerOperator::{self._inner_operator.name}'
         inner_power_str = f'PowerType::{self._inner_power.name}'
         outer_power_str = f'PowerType::{self._outer_power.name}'
@@ -279,15 +288,26 @@ def run_kernel(
     ld_b = max(b.stride(0),b.stride(1))
     ld_c = max(result.stride(0),result.stride(1))
 
-    kernel_args = (
-        M, N, K,
-        a.data_ptr(), ld_a,
-        b.data_ptr(), ld_b,
-        result.data_ptr(), ld_c,
-        np.float32(inner_p),
-        np.float32(outer_p),
-        np.float32(bandwidth)
-    )
+    if majorness_C == Majorness.COL_MAJOR:
+        kernel_args = (
+            M, N, K,
+            a.data_ptr(), ld_a,
+            b.data_ptr(), ld_b,
+            result.data_ptr(), ld_c,
+            np.float32(inner_p),
+            np.float32(outer_p),
+            np.float32(bandwidth)
+        )
+    else:
+        kernel_args = (
+            N, M, K,
+            b.data_ptr(), ld_b,
+            a.data_ptr(), ld_a,
+            result.data_ptr(), ld_c,
+            np.float32(inner_p),
+            np.float32(outer_p),
+            np.float32(bandwidth)
+        )
 
     launch(stream, config, kernel, *kernel_args)
 
