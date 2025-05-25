@@ -34,9 +34,10 @@ import torch
 device = torch.device('cuda')
 a = torch.randn(100,10,device=device)
 b = torch.randn(100,10,device=device)
-c = kermac.cdist(a,b)
+c = kermac.cdist(a,b,debug=True)
 print(c)
 ```
+The above checks will dynamically compile the kernels requested and cache them for later.
 
 ### Examples
 To run `kermac.cdist`:
