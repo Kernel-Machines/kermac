@@ -1,0 +1,100 @@
+import unittest
+import torch
+from itertools import product
+import kermac
+
+class TestCDist(unittest.TestCase):
+    def setUp(self):
+        """Set up test parameters and device."""
+        self.device = torch.device('cuda')
+        self.M = 100  # Smaller sizes for faster tests
+        self.N = 100
+        self.K = 64
+        self.p_values = [1.0, 1.3, 2.0]  # p-norm values to test
+        self.try_to_align_values = [False, True]  # try_to_align values to test
+        self.atol = 1e-4  # Absolute tolerance for numerical comparison
+        self.rtol = 1e-5  # Relative tolerance for numerical comparison
+        self.debug = True
+
+        descriptors = [
+            kermac.kernel_descriptor_l1_norm,
+            kermac.kernel_descriptor_l2_norm,
+            kermac.kernel_descriptor_p_norm,
+        ]
+
+        kermac.pre_compile_descriptors(
+            device=self.device,
+            descriptors=descriptors,
+            try_to_align=True,
+            debug=self.debug
+        )
+
+    def _create_tensors(self, a_col_major, b_col_major, c_col_major):
+        """Create input and output tensors based on transpose flags."""
+        a = torch.randn(self.K, self.M, device=self.device).T if a_col_major else torch.randn(self.M, self.K, device=self.device)
+        b = torch.randn(self.K, self.N, device=self.device).T if b_col_major else torch.randn(self.N, self.K, device=self.device)
+        c = torch.randn(self.N, self.M, device=self.device).T if c_col_major else torch.randn(self.M, self.N, device=self.device)
+        return a, b, c
+
+    def _compare_outputs(self, kermac_out, torch_out):
+        """Compare kermac.cdist and torch.cdist outputs."""
+        diff = kermac_out - torch_out
+        mse = torch.mean(diff ** 2)
+        rmse = torch.sqrt(mse).item()
+        max_abs_error = torch.max(torch.abs(diff)).item()
+        return rmse, max_abs_error
+
+    def test_cdist_transposes(self):
+        """Test kermac.cdist against torch.cdist for all transpose, p, and try_to_align combinations."""
+        transpose_combinations = list(product([False, True], repeat=3))
+        for a_col_major, b_col_major, c_col_major in transpose_combinations:
+            for p in self.p_values:
+                for try_to_align in self.try_to_align_values:
+                    with self.subTest(
+                        a_col_major=a_col_major,
+                        b_col_major=b_col_major,
+                        c_col_major=c_col_major,
+                        p=p,
+                        try_to_align=try_to_align
+                    ):
+                        # Create tensors
+                        a, b, c = self._create_tensors(a_col_major, b_col_major, c_col_major)
+
+                        # Run kermac.cdist
+                        kermac_out = kermac.cdist(
+                            a, b, p=p, out=c,
+                            skip_epilogue=False, try_to_align=try_to_align, debug=self.debug
+                        )
+
+                        # Run torch.cdist
+                        torch_out = torch.cdist(a, b, p=p)
+
+                        # Compare outputs
+                        rmse, max_abs_error = self._compare_outputs(kermac_out, torch_out)
+
+                        # Assert numerical closeness
+                        self.assertLess(rmse, self.atol,
+                            f"RMSE too high for transposes a_col_major={a_col_major}, "
+                            f"b_col_major={b_col_major}, c_col_major={c_col_major}, "
+                            f"p={p}, try_to_align={try_to_align}")
+                        self.assertLess(max_abs_error, self.atol,
+                            f"Max absolute error too high for transposes a_col_major={a_col_major}, "
+                            f"b_col_major={b_col_major}, c_col_major={c_col_major}, "
+                            f"p={p}, try_to_align={try_to_align}")
+
+    # @unittest.skipIf(not torch.cuda.is_available(), "CUDA not available")
+    # def test_cdist_cuda(self):
+    #     """Test kermac.cdist on CUDA for one configuration."""
+    #     a, b, c = self._create_tensors(a_col_major=False, b_col_major=False, c_col_major=False)
+    #     kermac_out = kermac_cdist(
+    #         a, b, p=1.0, out=c,
+    #         skip_epilogue=False, try_to_align=False, debug=False
+    #     )
+    #     torch_out = torch.cdist(a, b, p=1.0)
+    #     self.assertTrue(kermac_out.is_cuda, "kermac.cdist output should be on CUDA")
+    #     rmse, max_abs_error = self._compare_outputs(kermac_out, torch_out)
+    #     self.assertLess(rmse, self.atol, "RMSE too high on CUDA")
+    #     self.assertLess(max_abs_error, self.atol, "Max absolute error too high on CUDA")
+
+if __name__ == "__main__":
+    unittest.main()

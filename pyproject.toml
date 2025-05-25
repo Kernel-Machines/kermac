@@ -36,3 +36,8 @@ thirdparty = "thirdparty"
 [tool.hatch.build.targets.sdist.force-include]
 include = "include"
 thirdparty = "thirdparty"
+
+[tool.hatch.envs.test]
+python = "3.8"  # Matches requires-python
+dependencies = []  # No extra dependencies for unittest
+scripts.test = "python -m unittest discover -s tests -p 'test_*.py' -v"
