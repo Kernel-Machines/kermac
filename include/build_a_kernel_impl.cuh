@@ -28,6 +28,10 @@ cute_build_kernel(
     T p_power_outer,
     T bandwidth
 ) {
+    // Don't support ALIGN_4 specialization for ROW_MAJOR tensors
+    static_assert(majorness_A != Majorness::ROW_MAJOR || align_A != Alignment::ALIGN_4);
+    static_assert(majorness_B != Majorness::ROW_MAJOR || align_B != Alignment::ALIGN_4);
+
     using namespace cute;
 
     auto M = u64(m);
@@ -102,19 +106,11 @@ cute_build_kernel(
                 );
             }
         } else {
-            if constexpr (align_A == Alignment::ALIGN_4) {
-                return make_tiled_copy(
-                    Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
-                    Layout<Shape<_32,_8>, Stride<_8,_1>>{},
-                    Layout<Shape< _1,_1>>{}
-                );
-            } else {
-                return make_tiled_copy(
-                    Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
-                    Layout<Shape<_32,_8>, Stride<_8,_1>>{},
-                    Layout<Shape< _1,_1>>{}
-                );
-            }
+            return make_tiled_copy(
+                Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
+                Layout<Shape<_32,_8>, Stride<_8,_1>>{},
+                Layout<Shape< _1,_1>>{}
+            );
         }
     }();
 
@@ -134,19 +130,11 @@ cute_build_kernel(
                 );
             }
         } else {
-            if constexpr (align_B == Alignment::ALIGN_4) {
-                return make_tiled_copy(
-                    Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
-                    Layout<Shape<_32,_8>, Stride<_8,_1>>{},
-                    Layout<Shape< _1,_1>>{}
-                );
-            } else {
-                return make_tiled_copy(
-                    Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
-                    Layout<Shape<_32,_8>, Stride<_8,_1>>{},
-                    Layout<Shape< _1,_1>>{}
-                );
-            }
+            return make_tiled_copy(
+                Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
+                Layout<Shape<_32,_8>, Stride<_8,_1>>{},
+                Layout<Shape< _1,_1>>{}
+            );
         }
     }();
 

@@ -93,6 +93,10 @@ def tensor_stats(
         majorness = Majorness.COL_MAJOR
     else:
         raise ValueError(f"Tensor has non-standard memory layout: strides={tensor.stride()}, shape=({num_rows}, {num_cols})")
+    
+    if majorness == Majorness.ROW_MAJOR:
+        # Don't allow specialization for row major for align 4
+        return Majorness.ROW_MAJOR, Alignment.ALIGN_1
 
     alignment_requirement_bytes = 16
     alignment_requirement_elements = 4
