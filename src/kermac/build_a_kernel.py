@@ -260,7 +260,7 @@ def run_kernel(
     if tensor_device != pt_device:
         raise ValueError("cuda stream must be on the same device as the tensors: got {pt_device}, expected {tensor_device}")
     
-    majorness_C = Majorness.ROW_MAJOR if check_is_row_major(result) else Majorness.COL_MAJOR
+    majorness_C, _ = tensor_stats(result)
     if majorness_C == Majorness.ROW_MAJOR:
         # Swap arguments if output tensor is row major
         # Kernel will dispatch to version with output as col major
@@ -297,9 +297,9 @@ def run_kernel(
 
     kernel_args = (
         M, N, K,
-        a.data_ptr(), ld_a,
-        b.data_ptr(), ld_b,
-        result.data_ptr(), ld_c,
+        a.data_ptr(), np.uint64(ld_a),
+        b.data_ptr(), np.uint64(ld_b),
+        result.data_ptr(), np.uint64(ld_c),
         np.float32(inner_p),
         np.float32(outer_p),
         np.float32(bandwidth)

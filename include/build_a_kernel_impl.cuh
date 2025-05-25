@@ -21,9 +21,9 @@ __forceinline__
 void
 cute_build_kernel(
     int m, int n, int k,
-    T const *A, int ldA,
-    T const *B, int ldB,
-    T *C, int ldC,
+    T const *A, u64 ldA,
+    T const *B, u64 ldB,
+    T *C, u64 ldC,
     T p_power_inner, 
     T p_power_outer,
     T bandwidth
@@ -38,10 +38,6 @@ cute_build_kernel(
     auto N = u64(n);
     auto K = u64(k);
 
-    auto LDA = u64(ldA);
-    auto LDB = u64(ldB);
-    auto LDC = u64(ldC);
-
     auto bM = Int<128>{};
     auto bN = Int<128>{};
     auto bK = Int<8>{};
@@ -49,21 +45,21 @@ cute_build_kernel(
     auto bP = Int<3>{};
 
     auto prob_shape = make_shape(M,N,K);
-    auto dA = [LDA] { 
+    auto dA = [ldA] { 
         if constexpr(majorness_A == Majorness::COL_MAJOR) {
-            return make_stride(Int<1>{}, LDA);
+            return make_stride(Int<1>{}, ldA);
         } else {
-            return make_stride(LDA, Int<1>{});
+            return make_stride(ldA, Int<1>{});
         }
     }();
-    auto dB = [LDB] { 
+    auto dB = [ldB] { 
         if constexpr (majorness_B == Majorness::COL_MAJOR) {
-            return make_stride(Int<1>{}, LDB);
+            return make_stride(Int<1>{}, ldB);
         } else {
-            return make_stride(LDB, Int<1>{});
+            return make_stride(ldB, Int<1>{});
         }
     }();
-    auto dC = make_stride(Int<1>{}, LDC);
+    auto dC = make_stride(Int<1>{}, ldC);
 
     auto sA = [bM,bK,bP] {
         if constexpr (majorness_A == Majorness::COL_MAJOR) {
@@ -173,9 +169,9 @@ __launch_bounds__(256)
 void
 cute_build_kernel(
     int m, int n, int k,
-    float const *A, int ldA,
-    float const *B, int ldB,
-    float *C, int ldC,
+    float const *A, u64 ldA,
+    float const *B, u64 ldB,
+    float *C, u64 ldC,
     float p_power_inner, 
     float p_power_outer,
     float bandwidth

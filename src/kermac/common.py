@@ -35,45 +35,9 @@ class CudaTimer:
         self.end_event.record()
         self.end_event.synchronize()  # Ensure events are complete
         return self.start_event.elapsed_time(self.end_event)
-    
-def check_is_row_major(tensor):
-    # Ensure the tensor is 2D
-    if tensor.dim() != 2:
-        raise ValueError("Input tensor must be 2-dimensional")
-    
-    # Get strides
-    strides = tensor.stride()
-    rows, cols = tensor.size()
-    
-    # Strides for a 2D tensor: (stride for rows, stride for columns)
-    stride_row, stride_col = strides
-    
-    # Check memory layout based on strides
-    if stride_col == 1 and stride_row >= cols:
-        return True
-    elif stride_row == 1 and stride_col >= rows:
-        return False
-    else:
-        raise ValueError(f"Tensor has non-standard memory layout: strides={strides}, shape=({rows}, {cols})")
 
 def ceil_div(x, d):
     return int((x + d - 1) // d)
-
-def is_tensor_16_byte_aligned(
-    a : torch.Tensor
-):
-    if a.dtype != torch.float32:
-        raise TypeError("a must have dtype torch.float32")
-    alignment_requirement_bytes = 16
-    alignment_requirement_elements = 4
-
-    if not a.data_ptr() % alignment_requirement_bytes == 0:
-        return False
-    
-    if not a.stride(0) % alignment_requirement_elements == 0:
-        return False
-    
-    return True
 
 def tensor_stats(
     tensor : torch.Tensor
