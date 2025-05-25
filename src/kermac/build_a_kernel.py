@@ -208,9 +208,9 @@ def run_kernel(
         raise TypeError("out must have dtype torch.float32")
 
     # Check number of dimensions
-    if a.dim() != 2 or b.dim() != 2:
+    if a.dim() not in (2, 3) or b.dim() not in (2, 3):
         raise ValueError("a and b must be 2-dimensional")
-    if out is not None and out.dim() != 2:
+    if out is not None and out.dim() not in (2,3):
         raise ValueError("out must be 2-dimensional")
 
     # Check CUDA device
@@ -225,9 +225,12 @@ def run_kernel(
     if out is not None and out.device != tensor_device:
         raise ValueError(f"out must be on the same CUDA device as inputs: got {out.device}, expected {tensor_device}")
 
+    tensor_stats_a = tensor_stats(a)
+    tensor_stats_b = tensor_stats(b)
+
     # Get shapes
-    M, K_a = a.shape
-    N, K_b = b.shape
+    L_a, M, K_a = tensor_stats_a.shape
+    L_b, N, K_b = tensor_stats_b.shape
 
     # Check shape consistency
     if K_a != K_b:
@@ -235,12 +238,27 @@ def run_kernel(
     
     K = K_a
 
-    # Check output shape if provided
+    # If one tensor has batch size 1 and the other doesn't we can broadcast
+    L = max(L_a, L_b)
+    if L_a != L and L_a != 1:
+        raise ValueError(f"a must have batch dimension (L={L_a}), got {(L)}")
+    
+    if L_b != L and L_b != 1:
+        raise ValueError(f"b must have batch dimension (L={L_b}), got {(L)}")
+    
     if out is not None:
-        if out.shape != (M, N):
-            raise ValueError(f"out must have shape (M={M}, N={N}), got {out.shape}")
+        tensor_stats_c = tensor_stats(out)
+        L_c, M_c, N_c = tensor_stats_c.shape
+        if (M_c, N_c) != (M,N):
+            raise ValueError(f"out must have shape (M={M}, N={N}), got {(M_c, N_c)}")
+        if L_c != L and L != 1:
+            raise ValueError(f"out must have batch dimension (L={L}), got {(L_c)}")
+        L = L_c
+    else:
+        out = torch.zeros((L, M, N), dtype=torch.float32, device=a.device)
+        tensor_stats_c = tensor_stats(out)   
 
-    result = torch.zeros((M, N), dtype=torch.float32, device=a.device) if out is None else out
+    result = out
 
     module_cache = ModuleCache(debug)
    
@@ -253,27 +271,31 @@ def run_kernel(
     if tensor_device != pt_device:
         raise ValueError("cuda stream must be on the same device as the tensors: got {pt_device}, expected {tensor_device}")
     
-    majorness_C, _ = tensor_stats(result)
-    if majorness_C == Majorness.ROW_MAJOR:
+    if tensor_stats_c.majorness == Majorness.ROW_MAJOR:
         # Swap arguments if output tensor is row major
         # Kernel will dispatch to version with output as col major
         temp_M = M
         M = N
         N = temp_M
+
         temp_a = a
         a = b
         b = temp_a
+        
+        temp_tensor_stats_a = tensor_stats_a
+        tensor_stats_a = tensor_stats_b
+        tensor_stats_b = temp_tensor_stats_a
 
-    majorness_A, align_4_A = tensor_stats(a)
-    majorness_B, align_4_B = tensor_stats(b)
-    align_4_A = Alignment.ALIGN_1 if not try_to_align else align_4_A
-    align_4_B = Alignment.ALIGN_1 if not try_to_align else align_4_B
+    
+    align_4_A = Alignment.ALIGN_1 if not try_to_align else tensor_stats_a.alignment
+    align_4_B = Alignment.ALIGN_1 if not try_to_align else tensor_stats_b.alignment
+
     bM = 128
     bN = 128
 
     block = 256
 
-    function_name = kernel_descriptor._render_function_name(majorness_A, majorness_B, align_4_A, align_4_B)
+    function_name = kernel_descriptor._render_function_name(tensor_stats_a.majorness, tensor_stats_b.majorness, align_4_A, align_4_B)
     kernel = module_cache.get_function(device, function_name, debug=debug)
 
     if debug:
@@ -281,18 +303,24 @@ def run_kernel(
 
     num_blocks_M = ceil_div(M, bM)
     num_blocks_N = ceil_div(N, bN)
+    num_batches = L
 
-    grid = (num_blocks_M, num_blocks_N, 1)
+    grid = (num_blocks_M, num_blocks_N, num_batches)
     config = LaunchConfig(grid=grid, block=block)
-    ld_a = max(a.stride(0),a.stride(1))
-    ld_b = max(b.stride(0),b.stride(1))
-    ld_c = max(result.stride(0),result.stride(1))
+    ld_a = np.uint64(tensor_stats_a.leading_dimension_stride)
+    batch_stride_a = np.uint64(tensor_stats_a.batch_stride)
+
+    ld_b = np.uint64(tensor_stats_b.leading_dimension_stride)
+    batch_stride_b = np.uint64(tensor_stats_b.batch_stride)
+
+    ld_c = np.uint64(tensor_stats_c.leading_dimension_stride)
+    batch_stride_c = np.uint64(tensor_stats_c.batch_stride)
 
     kernel_args = (
-        M, N, K,
-        a.data_ptr(), np.uint64(ld_a),
-        b.data_ptr(), np.uint64(ld_b),
-        result.data_ptr(), np.uint64(ld_c),
+        M, N, K, L,
+        a.data_ptr(),       ld_a,    batch_stride_a,
+        b.data_ptr(),       ld_b,    batch_stride_b,
+        result.data_ptr(),  ld_c,    batch_stride_c,
         np.float32(inner_p),
         np.float32(outer_p),
         np.float32(bandwidth)

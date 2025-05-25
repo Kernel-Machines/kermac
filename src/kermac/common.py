@@ -1,5 +1,6 @@
 import torch
 from enum import Enum, auto
+from typing import Tuple
 
 class Majorness(Enum):
     COL_MAJOR = auto()
@@ -39,38 +40,76 @@ class CudaTimer:
 def ceil_div(x, d):
     return int((x + d - 1) // d)
 
-def tensor_stats(
-    tensor : torch.Tensor
-):
-    if tensor.dim() != 2:
-        raise ValueError("Input tensor must be 2-dimensional")
+class TensorStats:
+    def __init__(self, tensor: torch.Tensor):
+        if tensor.dim() not in (2, 3):
+            raise ValueError("Input tensor must be 2 or 3-dimensional")
+        
+        if tensor.dtype != torch.float32:
+            raise TypeError("Input tensor must have dtype torch.float32")
+        
+        dim = tensor.dim()
+        shape = tensor.size()
+        strides = tensor.stride()
+        
+        # Calculate batch information
+        self._num_batches = 1 if dim == 2 else shape[0]
+        self._batch_stride = 0 if dim == 2 or self._num_batches == 1 else strides[0]
 
-    if tensor.dtype != torch.float32:
-        raise TypeError("a must have dtype torch.float32")
+        # Get row/col dimensions (last two dimensions for rank 3)
+        num_rows = shape[-2]
+        num_cols = shape[-1]
+        stride_row = strides[-2]
+        stride_col = strides[-1]
+
+        self._shape = (self._num_batches, num_rows, num_cols)
+        
+        # Determine majorness
+        if stride_col == 1 and stride_row >= num_cols:
+            self._majorness = Majorness.ROW_MAJOR
+        elif stride_row == 1 and stride_col >= num_rows:
+            self._majorness = Majorness.COL_MAJOR
+        else:
+            raise ValueError(f"Tensor has non-standard memory layout: strides={strides}, shape={shape}")
+        
+        # Calculate alignment
+        self._alignment_requirement_bytes = 16
+        self._alignment_requirement_elements = 4
+        
+        self._leading_dimension_stride = max(stride_row, stride_col)
+        
+        is_starting_pointer_aligned = tensor.data_ptr() % self._alignment_requirement_bytes == 0
+        is_leading_dimension_aligned = self._leading_dimension_stride % self._alignment_requirement_elements == 0
+        
+        if self._majorness == Majorness.ROW_MAJOR:
+            self._alignment = Alignment.ALIGN_1
+        else:
+            self._alignment = Alignment.ALIGN_4 if is_starting_pointer_aligned and is_leading_dimension_aligned else Alignment.ALIGN_1
+
+    # Accessors
+    @property
+    def shape(self) -> Tuple[int,int,int]:
+        return self._shape
+
+    @property
+    def majorness(self) -> Majorness:
+        return self._majorness
     
-    stride_row, stride_col = tensor.stride()
-    num_rows, num_cols = tensor.size()
-
-    if stride_col == 1 and stride_row >= num_cols:
-        majorness = Majorness.ROW_MAJOR
-    elif stride_row == 1 and stride_col >= num_rows:
-        majorness = Majorness.COL_MAJOR
-    else:
-        raise ValueError(f"Tensor has non-standard memory layout: strides={tensor.stride()}, shape=({num_rows}, {num_cols})")
+    @property
+    def alignment(self) -> Alignment:
+        return self._alignment
     
-    if majorness == Majorness.ROW_MAJOR:
-        # Don't allow specialization for row major for align 4
-        return Majorness.ROW_MAJOR, Alignment.ALIGN_1
-
-    alignment_requirement_bytes = 16
-    alignment_requirement_elements = 4
-
-    leading_dimension_index = 0 if majorness == Majorness.ROW_MAJOR else 1
-    leading_dimension = tensor.stride(leading_dimension_index)
-
-    is_starting_pointer_aligned = tensor.data_ptr() % alignment_requirement_bytes == 0
-    is_leading_dimension_aligned =leading_dimension % alignment_requirement_elements == 0
-
-    alignment = Alignment.ALIGN_4 if is_starting_pointer_aligned and is_leading_dimension_aligned else Alignment.ALIGN_1
+    @property
+    def num_batches(self) -> int:
+        return self._num_batches
     
-    return majorness, alignment
+    @property
+    def batch_stride(self) -> int:
+        return self._batch_stride
+    
+    @property
+    def leading_dimension_stride(self) -> int:
+        return self._leading_dimension_stride
+
+def tensor_stats(tensor: torch.Tensor) -> TensorStats:
+    return TensorStats(tensor)

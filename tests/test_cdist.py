@@ -21,7 +21,7 @@ class TestCDist(unittest.TestCase):
             kermac.kernel_descriptor_l2_norm,
             kermac.kernel_descriptor_p_norm,
         ]
-
+        print('Bulk compiling kernels')
         kermac.pre_compile_descriptors(
             device=self.device,
             descriptors=descriptors,
