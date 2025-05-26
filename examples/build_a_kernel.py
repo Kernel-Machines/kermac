@@ -46,8 +46,8 @@ def main():
         kernel_descriptor_gaussian_p_norm
     ]
 
+    print('Bulk compiling kernels')
     if debug:
-        print('(Kermac Debug) Bulk compiling kernels')
         print('(Kermac Debug) Choosing architecture from cuda device 0')
     kermac.pre_compile_descriptors(
         device=device,

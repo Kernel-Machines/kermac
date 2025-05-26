@@ -1,14 +1,16 @@
 ![function](media/frame179_2min_crop.jpg)
-# kermac
-**Pytorch** routines for (**Ker**)nel (**Mac**)hines
 
-## These routines are very fast
+# KERMAC
 
-However they only support **sm_80** or higher **Nvidia** cards. This includes:
-* Server cards like **A10**, **A100**, **H100**, **B100**
-* Consumer **RTX 30xx**, **RTX 40xx**, **RTX 50xx**
+Kermac is a collection of fused CUDA kernels meant for fast and memory efficient computation for kernel methods. Kermac makes heavy use of JIT (Just-in-time) compilation to generate custom CUDA kernels on demand. These compiled kernels are stored in a cache database so the JIT costs are only incurred once. Using `debug=True` in most kermac routines will print information related to the compilation and caching of these JIT CUDA kernels.
 
-## Install
+Kermac supports only Nvidia cards with capability of `sm_80` or higher. This includes:
+* Server cards like A10, A100, H100, B100
+* Consumer cards like RTX 30xx, RTX 40xx, RTX 50xx
+
+Kermac relies on [**cuda-core**](https://nvidia.github.io/cuda-python/cuda-core/latest/) for JIT compilation which is supported for cuda toolkits 11.8 and 12.x. Because of cuda-core and nvmath packages no C++ compilation or wheel system is needed to install this library.
+
+# Installation
 
 ### CUDA 12
 ``` bash
@@ -20,45 +22,43 @@ pip install "kermac[cu12] @ git+https://github.com/Kernel-Machines/kermac"
 pip install "kermac[cu11] @ git+https://github.com/Kernel-Machines/kermac"
 ```
 
-### Check Install
+# Examples
 From a fresh environment you can do:
+## [`cdist.py`](examples/cdist.py)
+
 ``` bash
 wget https://raw.githubusercontent.com/Kernel-Machines/kermac/refs/heads/master/examples/cdist.py
 python cdist.py -d -p 1.0
 ```
-or from a python repl you can do:
-``` python
-import kermac
-import torch
-
-device = torch.device('cuda')
-a = torch.randn(100,10,device=device)
-b = torch.randn(100,10,device=device)
-c = kermac.cdist(a,b,debug=True)
-print(c)
-```
-The above checks will dynamically compile the kernels requested and cache them for later.
-
-### Examples
-To run `kermac.cdist`:
-``` bash
-wget https://raw.githubusercontent.com/Kernel-Machines/kermac/refs/heads/master/examples/cdist.py
-python cdist.py -d -p 1.0
-```
-To run `kermac.cdist_grad`:
+## [`cdist_grad.py`](examples/cdist_grad.py)
 ``` bash
 wget https://raw.githubusercontent.com/Kernel-Machines/kermac/refs/heads/master/examples/cdist_grad.py
-python cdist_grad.py -d -p 2.0
-# For some reason running the script a second time after compiling kernel is much faster
-python cdist_grad.py -d -p 2.0
+python cdist_grad.py -d
 ```
-To wipe out the compiled cubin cache you can do:
+## [`build_a_kernel.py`](examples/build_a_kernel.py)
+Running `build_a_kernel.py` will batch compile quite a few different kernels on first run. Expect around 20 seconds of JIT compiling.
 ``` bash
-rm -rf ~/.cache/kermac
+wget https://raw.githubusercontent.com/Kernel-Machines/kermac/refs/heads/master/examples/build_a_kernel.py
+python build_a_kernel.py -d
 ```
+## [`linalg.py`](examples/linalg.py)
+``` bash
+wget https://raw.githubusercontent.com/Kernel-Machines/kermac/refs/heads/master/examples/linalg.py
+python linalg.py
+```
+## Function: `linalg.solve_cholesky`
+Solves a symmetric system of equations like [`torch.linalg.cholesky`](https://docs.pytorch.org/docs/stable/generated/torch.linalg.cholesky.html). Wraps `xpotrf` and `xpotrs` from [`nvmath.bindings.cusolverDn`](https://docs.nvidia.com/cuda/nvmath-python/latest/bindings/cusolver.html). This implementation is special because it doesn't synchronize with the cpu on a failed cholesky factor. Additionally this routine can write the factorization in-place to the input matrix. In some cases this avoids a full 2x increase in memory usage. It launches a separate cuda-stream for each of the batches passed in. It does require a bit of workspace memory allocation for each stream. It synchronizes the cuda-streams against the current stream at the end of the routine.
 
-## Function: cdist
-An implementation of [**`torch.cdist`**](https://docs.pytorch.org/docs/stable/generated/torch.cdist.html). Computes fractional norms. Supports batches and broadcasting. Aside from the `out` tensor in the `out=None` case **DOES NOT ALLOCATE**
+## Function: `linalg.solve_lu`
+Solves a symmetric system of equations like [`torch.linalg.solve`](https://docs.pytorch.org/docs/stable/generated/torch.linalg.solve.html).
+Wraps `xgetrf` and `xgetrs` from [`nvmath.bindings.cusolverDn`](https://docs.nvidia.com/cuda/nvmath-python/latest/bindings/cusolver.html). This implementation is special because it doesn't synchronize with the cpu on a failed LU decomposition. Additionally this routine can write the factorization in-place to the input matrix. In some cases this avoids a full 2x increase in memory usage. It launches a separate cuda-stream for each of the batches passed in. It does require a bit of workspace memory allocation for each stream. It synchronizes the cuda-streams against the current stream at the end of the routine.
+
+## Function: `linalg.eigh`
+Computes eigenvalues and eigenvectors of a symmetric matrix like [`torch.linalg.eigh`](https://docs.pytorch.org/docs/stable/generated/torch.linalg.eigh.html)
+Wraps `xsyevd` from [`nvmath.bindings.cusolverDn`](https://docs.nvidia.com/cuda/nvmath-python/latest/bindings/cusolver.html). This implementation is special because it doesn't synchronize with the cpu on a failed eigenvalue decomposition. Additionally this routine can write the eigenvector decomposition in-place to the input matrix. In some cases this avoids a full 2x increase in memory usage. It launches a separate cuda-stream for each of the batches passed in. It does require a bit of workspace memory allocation for each stream. It synchronizes the cuda-streams against the current stream at the end of the routine.
+
+## Function: `cdist`
+An implementation of [**`torch.cdist`**](https://docs.pytorch.org/docs/stable/generated/torch.cdist.html). Computes fractional norms. Supports batches and broadcasting. Aside from the `out` tensor in the `out=None` case does not allocate.
 
 Computes:
 
@@ -102,7 +102,10 @@ with problem size $[M,N,K]$ = $[30000,30000,1024]$
 | **RTX 4090 · p = 1.3**   | **11.8×** | 350 | 4,141 |
 | **RTX 4090 · p = 2.0**   | **3.4×**  | 77  | 262  |
 
-## Function: cdist_grad
+## Function: `run_kernel`
+This is a more customizable version of `kermac.cdist`, `kermac.cdist` is written on top of this. `run_kernel` allows a descriptor as one of it's arguments that can create fully fused kernel functions. You can specify the inner-norm type (`abs(x)`, `x*x`, or `pow(x,p)`), the outer-norm type (`x`, `sqrt(x)`, or `pow(x,1/p`)) and finally a laplace or gaussian epilogue. On first run a fully fused kernel will be JIT compiled and cached for future use. This function also allows broadcasting and batching of it's input tensors. See [`build_a_kernel.py`](examples/build_a_kernel.py) for various examples of usage.
+
+## Function: `cdist_grad`
 Computes the gradient of `cdist` in the style like:
 
 $out_{o,n,m} = \sum_{k=1}^{K} c_{o,k}a_{k,m}\mathrm{sgn}\left(d_{n,m}-b_{n,k}\right)\left|d_{n,m}-b_{n,k}\right|^{p-1}$
@@ -151,18 +154,3 @@ out = kermac.cdist_grad(a,b,c,d,out=out) # OK
 ```
 
 ### Views are OK
-As explained with `cdist_t`.
-
-# Just-In-Time (JIT)
-This library just-in-time (JIT) compiles it's cuda kernels using Nvidia's [**cuda-core**](https://nvidia.github.io/cuda-python/cuda-core/latest/) package. The first run of a given configuration compiles the kernel and stores it in a cache database on disk. The next run for the same configuration should be fast. Using the debug flag like in:
-``` bash
-python cdist.py -p 1.0 -d
-```
-``` bash
-python examples/cdist.py -p 1.0 -d
-```
-or when calling a function like:
-``` python
-cdist(a,b,p=1.0,debug=True)
-```
-Will print information related to the compilation of kernel functions.
