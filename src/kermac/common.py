@@ -11,6 +11,10 @@ class Alignment(Enum):
     ALIGN_1 = auto()
     ALIGN_4 = auto()
 
+class FillMode(Enum):
+    UPPER = auto()
+    LOWER = auto()
+
 class PyTorchStreamWrapper:
     def __init__(self, pt_stream):
         self.pt_stream = pt_stream

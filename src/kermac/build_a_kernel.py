@@ -307,6 +307,7 @@ def run_kernel(
 
     grid = (num_blocks_M, num_blocks_N, num_batches)
     config = LaunchConfig(grid=grid, block=block)
+
     ld_a = np.uint64(tensor_stats_a.leading_dimension_stride)
     batch_stride_a = np.uint64(tensor_stats_a.batch_stride)
 

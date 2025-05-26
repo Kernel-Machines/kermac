@@ -12,7 +12,7 @@ try_to_align = True
 debug = True
 
 device = torch.device('cuda')
-a = torch.randn(D,N,device=device,dtype=torch.float32)
+a = torch.randn(N,D,device=device,dtype=torch.float32)
 b = torch.randn(C,N,device=device,dtype=torch.float32)
 out = torch.randn(N,N,device=device,dtype=torch.float32)
 factor_info = torch.ones(1,device=device,dtype=torch.int32)
@@ -90,6 +90,8 @@ nvmath.bindings.cusolverDn.xpotrf(
 )
 print(f'ms:{factor_timer.stop()}')
 
+print(f'factor_info: {factor_info}')
+
 del buffer_on_device
 del buffer_on_host
 
@@ -108,5 +110,4 @@ nvmath.bindings.cusolverDn.xpotrs(
 )
 print(f'ms:{solve_timer.stop()}')
 
-print(f'factor_info: {factor_info}')
 print(f'solve_info: {solve_info}')
