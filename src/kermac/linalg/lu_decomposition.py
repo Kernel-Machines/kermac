@@ -4,13 +4,12 @@ import torch
 
 import nvmath
 import kermac
-from ..common import Majorness
+from ..common import FillMode, Majorness
 from .common import map_fill_mode
 
-def solve_cholesky(
+def solve_lu(
     a : torch.Tensor,
     b : torch.Tensor,
-    fill_mode : kermac.FillMode = kermac.FillMode.LOWER,
     overwrite_a : bool = False,
     overwrite_b : bool = False,
     check_errors : bool = False
@@ -67,17 +66,17 @@ def solve_cholesky(
     cusolver_handle = cusolverDnHandle()
     cusolver_params = nvmath.bindings.cusolverDn.create_params()
 
-    uplo = map_fill_mode(fill_mode)
-
     data_type_a = nvmath.CudaDataType.CUDA_R_32F
     data_type_b = nvmath.CudaDataType.CUDA_R_32F
     compute_type = nvmath.CudaDataType.CUDA_R_32F
 
+    trans = nvmath.bindings.cublas.Operation.N
+
     device_bytes, host_bytes = \
-        nvmath.bindings.cusolverDn.xpotrf_buffer_size(
+        nvmath.bindings.cusolverDn.xgetrf_buffer_size(
             cusolver_handle._cusolver_handle,
             cusolver_params,
-            uplo,
+            N,
             N,
             data_type_a,
             a.data_ptr(), 
@@ -90,6 +89,8 @@ def solve_cholesky(
 
     factor_infos = torch.ones(L,device=tensor_device,dtype=torch.int32)
     solve_infos = torch.ones(L,device=tensor_device,dtype=torch.int32)
+
+    ipiv = torch.zeros(L,device=tensor_device,dtype=torch.int64)
 
     primary_stream = torch.cuda.current_stream()
     primary_event = torch.cuda.Event(enable_timing=False)
@@ -107,14 +108,15 @@ def solve_cholesky(
         this_stream.wait_event(primary_event)
 
         nvmath.bindings.cusolverDn.set_stream(cusolver_handle._cusolver_handle, this_stream.cuda_stream)
-        nvmath.bindings.cusolverDn.xpotrf(
+        nvmath.bindings.cusolverDn.xgetrf(
             cusolver_handle._cusolver_handle,
             cusolver_params,
-            uplo,
+            N,
             N,
             data_type_a,
             a[l].data_ptr(), 
             stride_a,
+            ipiv[l].data_ptr(),
             compute_type,
             buffer_on_device.data_ptr(),
             device_bytes,
@@ -123,15 +125,16 @@ def solve_cholesky(
             factor_infos[l].data_ptr()
         )
 
-        nvmath.bindings.cusolverDn.xpotrs(
+        nvmath.bindings.cusolverDn.xgetrs(
             cusolver_handle._cusolver_handle,
             cusolver_params,
-            uplo,
+            trans,
             N,
             C,
             data_type_a,
             a[l].data_ptr(), 
             stride_a,
+            ipiv[l].data_ptr(),
             data_type_b,
             b[l].data_ptr(), 
             stride_b,
@@ -159,7 +162,7 @@ def solve_cholesky(
         # If there are non-zero errors, raise an exception with the list
         if non_zero_errors:
             raise ValueError(f"Non-zero items found: {non_zero_errors}")
-    
-    nvmath.bindings.cusolverDn.destroy_params(cusolver_params)
 
+    nvmath.bindings.cusolverDn.destroy_params(cusolver_params)
+    
     return b, factor_infos, solve_infos

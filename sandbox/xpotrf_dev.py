@@ -6,7 +6,7 @@ import torch
 N = 7
 D = 6
 C = 2
-L = 10
+L = 1
 
 device = torch.device('cuda')
 data = torch.randn(L,N,D,device=device)
@@ -23,14 +23,11 @@ kermac.run_kernel(
     debug=True
 )
 
-uplo = kermac.FillMode.UPPER
-
 kernel_matrix_saved = kernel_matrix.clone()
 labels_saved = labels.clone()
 
 sol, factor_info, solve_info = \
-    kermac.linalg.solve(
-        uplo,
+    kermac.linalg.solve_lu(
         a=kernel_matrix, 
         b=labels,
         overwrite_a=True,

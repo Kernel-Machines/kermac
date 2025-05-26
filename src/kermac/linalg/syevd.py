@@ -4,41 +4,32 @@ import torch
 
 import nvmath
 import kermac
-from ..common import Majorness
+from ..common import FillMode, Majorness
 from .common import map_fill_mode
 
-def solve_cholesky(
+def eigh(
     a : torch.Tensor,
-    b : torch.Tensor,
     fill_mode : kermac.FillMode = kermac.FillMode.LOWER,
     overwrite_a : bool = False,
-    overwrite_b : bool = False,
     check_errors : bool = False
 ):
     # Check if inputs are tensors
-    if not isinstance(a, torch.Tensor) or not isinstance(b, torch.Tensor):
-        raise TypeError("a and b must be PyTorch tensors")
+    if not isinstance(a, torch.Tensor):
+        raise TypeError("a must be PyTorch tensors")
 
     # Check dtype
-    if a.dtype != torch.float32 or b.dtype != torch.float32:
-        raise TypeError("a and b must have dtype torch.float32")
+    if a.dtype != torch.float32:
+        raise TypeError("a must have dtype torch.float32")
     
     # Check CUDA device
-    if not a.is_cuda or not b.is_cuda:
-        raise ValueError("a and b must be on a CUDA device")
+    if not a.is_cuda:
+        raise ValueError("a must be on a CUDA device")
     
     tensor_device = a.device
-    if not all(x.device == tensor_device for x in (a, b)):
-        raise ValueError(f"All inputs must be on the same CUDA device: got {[x.device for x in (a, b)]}")
     
     tensor_stats_a = kermac.tensor_stats(a)
-    tensor_stats_b = kermac.tensor_stats(b)
 
     L_a, N_0_a, N_1_a = tensor_stats_a.shape
-    L_b, C_b, N_b = tensor_stats_b.shape
-
-    if L_a != L_b:
-        raise ValueError(f'a and b tensor must have the same batch mode got{(L_a, L_b)}')
     
     L = L_a
     
@@ -46,23 +37,13 @@ def solve_cholesky(
         raise ValueError(f'a tensor is not square, got {(N_0_a, N_1_a)}')
     
     N = N_0_a
-
-    if N_b != N:
-        raise ValueError(f'b tensor must have {N} columns, got {N_b}')
     
-    if tensor_stats_b.majorness == Majorness.COL_MAJOR:
-        raise ValueError(f'b tensor must have 1 stride in the rightmost dimension, got {tensor_stats_b.leading_dimension_stride}')
-    
-    C = C_b
+    w = torch.zeros(L,N,device=tensor_device)
 
     if not overwrite_a:
         a = a.clone()
-    
-    if not overwrite_b:
-        b = b.clone()
 
     stride_a = tensor_stats_a.leading_dimension_stride
-    stride_b = tensor_stats_b.leading_dimension_stride
     
     cusolver_handle = cusolverDnHandle()
     cusolver_params = nvmath.bindings.cusolverDn.create_params()
@@ -70,26 +51,30 @@ def solve_cholesky(
     uplo = map_fill_mode(fill_mode)
 
     data_type_a = nvmath.CudaDataType.CUDA_R_32F
-    data_type_b = nvmath.CudaDataType.CUDA_R_32F
+    data_type_w = nvmath.CudaDataType.CUDA_R_32F
     compute_type = nvmath.CudaDataType.CUDA_R_32F
 
+    jobz = nvmath.bindings.cusolver.EigMode.VECTOR
+
     device_bytes, host_bytes = \
-        nvmath.bindings.cusolverDn.xpotrf_buffer_size(
+        nvmath.bindings.cusolverDn.xsyevd_buffer_size(
             cusolver_handle._cusolver_handle,
             cusolver_params,
+            jobz,
             uplo,
             N,
             data_type_a,
             a.data_ptr(), 
             stride_a,
+            data_type_w,
+            w.data_ptr(),
             compute_type
         )
 
     buffer_on_device = torch.zeros(kermac.ceil_div(device_bytes,4), device=tensor_device, dtype=torch.int32)
     buffer_on_host = torch.zeros(kermac.ceil_div(host_bytes,4), dtype=torch.int32)
 
-    factor_infos = torch.ones(L,device=tensor_device,dtype=torch.int32)
-    solve_infos = torch.ones(L,device=tensor_device,dtype=torch.int32)
+    infos = torch.ones(L,device=tensor_device,dtype=torch.int32)
 
     primary_stream = torch.cuda.current_stream()
     primary_event = torch.cuda.Event(enable_timing=False)
@@ -107,35 +92,23 @@ def solve_cholesky(
         this_stream.wait_event(primary_event)
 
         nvmath.bindings.cusolverDn.set_stream(cusolver_handle._cusolver_handle, this_stream.cuda_stream)
-        nvmath.bindings.cusolverDn.xpotrf(
+        nvmath.bindings.cusolverDn.xsyevd(
             cusolver_handle._cusolver_handle,
             cusolver_params,
+            jobz,
             uplo,
             N,
             data_type_a,
             a[l].data_ptr(), 
             stride_a,
+            data_type_w,
+            w[l].data_ptr(),
             compute_type,
             buffer_on_device.data_ptr(),
             device_bytes,
             buffer_on_host.data_ptr(),
             host_bytes,
-            factor_infos[l].data_ptr()
-        )
-
-        nvmath.bindings.cusolverDn.xpotrs(
-            cusolver_handle._cusolver_handle,
-            cusolver_params,
-            uplo,
-            N,
-            C,
-            data_type_a,
-            a[l].data_ptr(), 
-            stride_a,
-            data_type_b,
-            b[l].data_ptr(), 
-            stride_b,
-            solve_infos[l].data_ptr()
+            infos[l].data_ptr()
         )
 
         this_event.record(this_stream)
@@ -148,18 +121,15 @@ def solve_cholesky(
         primary_stream.synchronize()
         non_zero_errors = []
         for l in range(L):
-            factor_info = factor_infos[l]
-            solve_info = solve_infos[l]
+            info = infos[l]
 
-            if factor_info != 0:
-                non_zero_errors.append(('factor_info', l, factor_info))
-            # Check if solve_info is non-zero and append to list
-            if solve_info != 0:
-                non_zero_errors.append(('solve_info', l, solve_info))
+            if info != 0:
+                non_zero_errors.append(('info', l, info))
         # If there are non-zero errors, raise an exception with the list
         if non_zero_errors:
             raise ValueError(f"Non-zero items found: {non_zero_errors}")
-    
-    nvmath.bindings.cusolverDn.destroy_params(cusolver_params)
 
-    return b, factor_infos, solve_infos
+    nvmath.bindings.cusolverDn.destroy_params(cusolver_params)
+    
+    # cusolver uses column-major, need to permute
+    return w, a.permute(0,2,1), infos
