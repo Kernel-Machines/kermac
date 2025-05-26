@@ -4,8 +4,7 @@ import torch
 
 import nvmath
 import kermac
-from ..common import FillMode, Majorness
-from .common import map_fill_mode
+from ..common import Majorness
 
 def solve_lu(
     a : torch.Tensor,
@@ -164,5 +163,5 @@ def solve_lu(
             raise ValueError(f"Non-zero items found: {non_zero_errors}")
 
     nvmath.bindings.cusolverDn.destroy_params(cusolver_params)
-    
+
     return b, factor_infos, solve_infos
