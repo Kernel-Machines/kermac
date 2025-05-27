@@ -6,23 +6,33 @@ import argparse
 def parse_args():
     """Parse command-line arguments for matrix dimensions and timing parameters."""
     parser = argparse.ArgumentParser(description="Run kernel and linear algebra operations with timings")
-    parser.add_argument('-n','--N', type=int, default=5000, help='Number of rows of data (default: 5000)')
-    parser.add_argument('-d','--D', type=int, default=32, help='Number of columns of data (default: 1000)')
+    parser.add_argument('-m','--M', type=int, default=5000, help='Number of rows of data (default: 5000)')
+    parser.add_argument('-k','--K', type=int, default=32, help='Number of columns of data (default: 1000)')
     parser.add_argument('-c','--C', type=int, default=16, help='Number of labels')
     parser.add_argument('-l','--L', type=int, default=10, help='Number of batches')
+    parser.add_argument('-d', '--debug', default=False, action='store_true', help='Enable debug output (default: False)')
     parser.add_argument('--warmup', type=int, default=2, help='Number of warmup rounds (default: 2)')
     parser.add_argument('--iters', type=int, default=10, help='Number of iteration rounds (default: 10)')
+    parser.add_argument('--skip_eigh', default=False, action='store_true', help='Skip running kermac.linalg.eigh.')
     args = parser.parse_args()
     return args
 
-def main(N, D, C, L, warmup_rounds, iterations):
+def main():
+    args = parse_args()
+    M, K, C, L = args.M, args.K, args.C, args.L
+    warmup_rounds = args.warmup
+    iterations = args.iters
+
     device = torch.device('cuda')
     timer = kermac.CudaTimer()
 
     # Initialize data
-    data = torch.randn(L, N, D, device=device)
-    labels = torch.randn(L, C, N, device=device)
-    kernel_matrix = torch.zeros(L, N, N, device=device)
+    data = torch.randn(L, M, K, device=device)
+    labels = torch.randn(L, C, M, device=device)
+    kernel_matrix = torch.zeros(L, M, M, device=device)
+
+    def infos_all_zero(infos):
+        return 'OK' if torch.all(infos == 0) else 'FAIL'
 
     # Warmup for run_kernel
     print(f'Warmup {warmup_rounds} iterations of kermac.run_kernel')
@@ -32,7 +42,8 @@ def main(N, D, C, L, warmup_rounds, iterations):
             a=data,
             b=data,
             out=kernel_matrix,
-            bandwidth=10.0
+            bandwidth=10.0,
+            debug=args.debug
         )
 
     # Timed run for run_kernel
@@ -44,38 +55,41 @@ def main(N, D, C, L, warmup_rounds, iterations):
             a=data,
             b=data,
             out=kernel_matrix,
-            bandwidth=10.0
+            bandwidth=10.0,
+            debug=args.debug
         )
-    print(kernel_matrix)
-    print(f'Running {iterations} iterations of kermac.run_kernel with size ({L},{N},{D})')
+    print(f'Running {iterations} iterations of kermac.run_kernel with size ({L},{M},{K})')
     print(f"\tkermac.run_kernel \t{timer.stop() / iterations:.3f} ms / iteration")
 
-    print('***EIGH***')
-    # Warmup for eigh
-    for _ in range(warmup_rounds):
-        kernel_matrix_clobber = kernel_matrix.clone()
-        kermac.linalg.eigh(
-            a=kernel_matrix_clobber,
-            overwrite_a=True,
-            check_errors=False
-        )
-
-    # Timed run for eigh
-    timer.start()
-    for _ in range(iterations):
-        kernel_matrix_clobber = kernel_matrix.clone()
-        eigenvalues, eigenvectors, infos = kermac.linalg.eigh(
-            a=kernel_matrix_clobber,
-            overwrite_a=True,
-            check_errors=False
-        )
-    print(f'Running {iterations} iterations of kermac.linalg.eigh with size ({L},{N},{N})')
-    print(f"\tkermac.linalg.eigh \t{timer.stop() / iterations:.3f} ms / iteration")
-    print(f'eigenvalues:\n{eigenvalues}')
-    print(f'eigenvectors:\n{eigenvectors}')
-    print(f'infos:\n{infos}')
+    if not args.skip_eigh:
+        print('***EIGH***')
+        # Warmup for eigh
+        print(f'Warmup {warmup_rounds} iterations of kermac.linalg.eigh with size ({L},{M},{M})')
+        for _ in range(warmup_rounds):
+            kernel_matrix_clobber = kernel_matrix.clone()
+            kermac.linalg.eigh(
+                a=kernel_matrix_clobber,
+                overwrite_a=True,
+                check_errors=False
+            )
+        torch.cuda.synchronize()
+        # Timed run for eigh
+        print(f'Running {iterations} iterations of kermac.linalg.eigh with size ({L},{M},{M})')
+        timer.start()
+        for _ in range(iterations):
+            kernel_matrix_clobber = kernel_matrix.clone()
+            eigenvalues, eigenvectors, infos = kermac.linalg.eigh(
+                a=kernel_matrix_clobber,
+                overwrite_a=True,
+                check_errors=False
+            )
+        print(f"\tkermac.linalg.eigh \t{timer.stop() / iterations:.3f} ms / iteration")
+        # print(f'eigenvalues:\n{eigenvalues}')
+        # print(f'eigenvectors:\n{eigenvectors}')
+        print(f'\tkermac.linalg.eigh infos: {infos_all_zero(infos)}')
     print('***CHOLESKY***')
     # Warmup for solve_cholesky
+    print(f'Warmup {warmup_rounds} iterations of kermac.linalg.solve_cholesky with size ({L},{M},{M}) and labels ({L},{C},{M})')
     for _ in range(warmup_rounds):
         labels_clobber = labels.clone()
         kernel_matrix_clobber = kernel_matrix.clone()
@@ -88,7 +102,7 @@ def main(N, D, C, L, warmup_rounds, iterations):
         )
     torch.cuda.synchronize()
 
-    # Timed run for solve_cholesky
+    print(f'Running {iterations} iterations of kermac.linalg.solve_cholesky with size ({L},{M},{M}) and labels ({L},{C},{M})')
     timer.start()
     for _ in range(iterations):
         labels_clobber = labels.clone()
@@ -101,17 +115,20 @@ def main(N, D, C, L, warmup_rounds, iterations):
             check_errors=False
         )
     torch.cuda.synchronize()
-    print(f'Running {iterations} iterations of kermac.linalg.solve_cholesky with size ({L},{N},{N}) and labels ({L},{C},{N})')
+   
     print(f"\tkermac.linalg.solve_cholesky \t{timer.stop() / iterations:.3f} ms / iteration")
-    print(f'sol:\n{sol}')
-    print(f'factor_infos:\n{factor_infos}')
-    print(f'solve_infos:\n{solve_infos}')
+    # print(f'sol:\n{sol}')
+    
+
+    print(f'\tkermac.linalg.solve_cholesky factor_infos: {infos_all_zero(factor_infos)}')
+    print(f'\tkermac.linalg.solve_cholesky solve_infos: {infos_all_zero(solve_infos)}')
 
     print('***LU***')
     # Warmup for solve_lu
-    labels_clobber = labels.clone()
-    kernel_matrix_clobber = kernel_matrix.clone()
+    print(f'Warmup {iterations} iterations of kermac.linalg.solve_lu with size ({L},{M},{M}) and labels ({L},{C},{M})')
     for _ in range(warmup_rounds):
+        labels_clobber = labels.clone()
+        kernel_matrix_clobber = kernel_matrix.clone()
         kermac.linalg.solve_lu(
             a=kernel_matrix_clobber,
             b=labels_clobber,
@@ -122,6 +139,7 @@ def main(N, D, C, L, warmup_rounds, iterations):
     torch.cuda.synchronize()
 
     # Timed run for solve_lu
+    print(f'Running {iterations} iterations of kermac.linalg.solve_lu with size ({L},{M},{M}) and labels ({L},{C},{M})')
     timer.start()
     for _ in range(iterations):
         labels_clobber = labels.clone()
@@ -134,12 +152,12 @@ def main(N, D, C, L, warmup_rounds, iterations):
             check_errors=False
         )
     torch.cuda.synchronize()
-    print(f'Running {iterations} iterations of kermac.linalg.solve_lu with size ({L},{N},{N}) and labels ({L},{C},{N})')
+    
     print(f"\tkermac.linalg.solve_lu \t{timer.stop() / iterations:.3f} ms / iteration")
-    print(f'sol:\n{sol}')
-    print(f'factor_infos:\n{factor_infos}')
-    print(f'solve_infos:\n{solve_infos}')
+    # print(f'sol:\n{sol}')
+    print(f'\tkermac.linalg.solve_lu factor_infos: {infos_all_zero(factor_infos)}')
+    print(f'\tkermac.linalg.solve_lu solve_infos: {infos_all_zero(solve_infos)}')
 
 if __name__ == '__main__':
-    args = parse_args()
-    main(args.N, args.D, args.C, args.L, args.warmup, args.iters)
+    main()
+    
