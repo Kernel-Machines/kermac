@@ -46,7 +46,6 @@ def eigh(
     stride_a = tensor_stats_a.leading_dimension_stride
     
     cusolver_handle = cusolverDnHandle()
-    cusolver_params = nvmath.bindings.cusolverDn.create_params()
 
     uplo = map_fill_mode(fill_mode)
 
@@ -59,7 +58,7 @@ def eigh(
     device_bytes, host_bytes = \
         nvmath.bindings.cusolverDn.xsyevd_buffer_size(
             cusolver_handle._cusolver_handle,
-            cusolver_params,
+            cusolver_handle._cusolver_params,
             jobz,
             uplo,
             N,
@@ -81,7 +80,6 @@ def eigh(
 
     # Record an event on the primary stream so other streams don't race past it
     primary_stream.record_event(primary_event)
-    # primary_event.record(primary_stream)
 
     streams = [torch.cuda.Stream() for _ in range(L)]
     events = [torch.cuda.Event(enable_timing=False) for _ in range(L)]
@@ -95,7 +93,7 @@ def eigh(
         nvmath.bindings.cusolverDn.set_stream(cusolver_handle._cusolver_handle, this_stream.cuda_stream)
         nvmath.bindings.cusolverDn.xsyevd(
             cusolver_handle._cusolver_handle,
-            cusolver_params,
+            cusolver_handle._cusolver_params,
             jobz,
             uplo,
             N,
@@ -116,7 +114,7 @@ def eigh(
 
     for event in events:
         # Now make sure that primary_stream synchronizes with all of the work from streams
-        event.wait(primary_stream)
+        primary_stream.wait_event(event)
 
     if check_errors:
         primary_stream.synchronize()
@@ -129,7 +127,6 @@ def eigh(
         # If there are non-zero errors, raise an exception with the list
         if non_zero_errors:
             raise ValueError(f"Non-zero items found: {non_zero_errors}")
-    nvmath.bindings.cusolverDn.destroy_params(cusolver_params)
     
     # cusolver uses column-major, need to permute
     return w, a.permute(0,2,1), infos

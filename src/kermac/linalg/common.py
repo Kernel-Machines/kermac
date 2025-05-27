@@ -17,9 +17,12 @@ class Singleton(type):
 class cusolverDnHandle(metaclass=Singleton):
     def __init__(self):
         self._cusolver_handle = nvmath.bindings.cusolverDn.create()
+        self._cusolver_params = nvmath.bindings.cusolverDn.create_params()
     
     def __del__(self):
+        nvmath.bindings.cusolverDn.destroy_params(self._cusolver_params)
         nvmath.bindings.cusolverDn.destroy(self._cusolver_handle)
+
 
 def map_fill_mode(fill_mode):
     if fill_mode == FillMode.UPPER:

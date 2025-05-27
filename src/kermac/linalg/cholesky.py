@@ -65,7 +65,6 @@ def solve_cholesky(
     stride_b = tensor_stats_b.leading_dimension_stride
     
     cusolver_handle = cusolverDnHandle()
-    cusolver_params = nvmath.bindings.cusolverDn.create_params()
 
     uplo = map_fill_mode(fill_mode)
 
@@ -76,7 +75,7 @@ def solve_cholesky(
     device_bytes, host_bytes = \
         nvmath.bindings.cusolverDn.xpotrf_buffer_size(
             cusolver_handle._cusolver_handle,
-            cusolver_params,
+            cusolver_handle._cusolver_params,
             uplo,
             N,
             data_type_a,
@@ -95,11 +94,10 @@ def solve_cholesky(
     primary_event = torch.cuda.Event(enable_timing=False)
 
     # Record an event on the primary stream so other streams don't race past it
-    primary_event.record(primary_stream)
+    primary_stream.record_event(primary_event)
 
     streams = [torch.cuda.Stream() for _ in range(L)]
     events = [torch.cuda.Event(enable_timing=False) for _ in range(L)]
-    torch.cuda.synchronize()
     for l in range(L):
         this_stream = streams[l]
         this_event = events[l]
@@ -109,7 +107,7 @@ def solve_cholesky(
         nvmath.bindings.cusolverDn.set_stream(cusolver_handle._cusolver_handle, this_stream.cuda_stream)
         nvmath.bindings.cusolverDn.xpotrf(
             cusolver_handle._cusolver_handle,
-            cusolver_params,
+            cusolver_handle._cusolver_params,
             uplo,
             N,
             data_type_a,
@@ -125,7 +123,7 @@ def solve_cholesky(
 
         nvmath.bindings.cusolverDn.xpotrs(
             cusolver_handle._cusolver_handle,
-            cusolver_params,
+            cusolver_handle._cusolver_params,
             uplo,
             N,
             C,
@@ -138,11 +136,10 @@ def solve_cholesky(
             solve_infos[l].data_ptr()
         )
 
-        this_event.record(this_stream)
-    torch.cuda.synchronize()
+        this_stream.record_event(this_event)
     for event in events:
         # Now make sure that primary_stream synchronizes with all of the work from streams
-        event.wait(primary_stream)
+        primary_stream.wait_event(event)
 
     if check_errors:
         primary_stream.synchronize()
@@ -160,7 +157,4 @@ def solve_cholesky(
         if non_zero_errors:
             raise ValueError(f"Non-zero items found: {non_zero_errors}")
     
-    torch.cuda.synchronize()
-    nvmath.bindings.cusolverDn.destroy_params(cusolver_params)
-
     return b, factor_infos, solve_infos
