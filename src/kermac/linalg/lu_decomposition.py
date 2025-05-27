@@ -83,13 +83,13 @@ def solve_lu(
             compute_type
         )
 
-    buffer_on_device = torch.zeros(kermac.ceil_div(device_bytes,4), device=tensor_device, dtype=torch.int32)
-    buffer_on_host = torch.zeros(kermac.ceil_div(host_bytes,4), dtype=torch.int32)
+    buffer_on_device = torch.zeros(L,kermac.ceil_div(device_bytes,4), device=tensor_device, dtype=torch.int32)
+    buffer_on_host = torch.zeros(L,kermac.ceil_div(host_bytes,4), dtype=torch.int32)
 
     factor_infos = torch.ones(L,device=tensor_device,dtype=torch.int32)
     solve_infos = torch.ones(L,device=tensor_device,dtype=torch.int32)
 
-    ipiv = torch.zeros(L,device=tensor_device,dtype=torch.int64)
+    ipiv = torch.zeros(L,N,device=tensor_device,dtype=torch.int64)
 
     primary_stream = torch.cuda.current_stream()
     primary_event = torch.cuda.Event(enable_timing=False)
@@ -117,9 +117,9 @@ def solve_lu(
             stride_a,
             ipiv[l].data_ptr(),
             compute_type,
-            buffer_on_device.data_ptr(),
+            buffer_on_device[l].data_ptr(),
             device_bytes,
-            buffer_on_host.data_ptr(),
+            buffer_on_host[l].data_ptr(),
             host_bytes,
             factor_infos[l].data_ptr()
         )
@@ -162,6 +162,7 @@ def solve_lu(
         if non_zero_errors:
             raise ValueError(f"Non-zero items found: {non_zero_errors}")
 
+    torch.cuda.synchronize()
     nvmath.bindings.cusolverDn.destroy_params(cusolver_params)
 
     return b, factor_infos, solve_infos

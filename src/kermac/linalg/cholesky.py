@@ -85,8 +85,8 @@ def solve_cholesky(
             compute_type
         )
 
-    buffer_on_device = torch.zeros(kermac.ceil_div(device_bytes,4), device=tensor_device, dtype=torch.int32)
-    buffer_on_host = torch.zeros(kermac.ceil_div(host_bytes,4), dtype=torch.int32)
+    buffer_on_device = torch.zeros(L,kermac.ceil_div(device_bytes,4), device=tensor_device, dtype=torch.int32)
+    buffer_on_host = torch.zeros(L,kermac.ceil_div(host_bytes,4), dtype=torch.int32)
 
     factor_infos = torch.ones(L,device=tensor_device,dtype=torch.int32)
     solve_infos = torch.ones(L,device=tensor_device,dtype=torch.int32)
@@ -99,7 +99,7 @@ def solve_cholesky(
 
     streams = [torch.cuda.Stream() for _ in range(L)]
     events = [torch.cuda.Event(enable_timing=False) for _ in range(L)]
-
+    torch.cuda.synchronize()
     for l in range(L):
         this_stream = streams[l]
         this_event = events[l]
@@ -116,9 +116,9 @@ def solve_cholesky(
             a[l].data_ptr(), 
             stride_a,
             compute_type,
-            buffer_on_device.data_ptr(),
+            buffer_on_device[l].data_ptr(),
             device_bytes,
-            buffer_on_host.data_ptr(),
+            buffer_on_host[l].data_ptr(),
             host_bytes,
             factor_infos[l].data_ptr()
         )
@@ -139,7 +139,7 @@ def solve_cholesky(
         )
 
         this_event.record(this_stream)
-
+    torch.cuda.synchronize()
     for event in events:
         # Now make sure that primary_stream synchronizes with all of the work from streams
         event.wait(primary_stream)
@@ -160,6 +160,7 @@ def solve_cholesky(
         if non_zero_errors:
             raise ValueError(f"Non-zero items found: {non_zero_errors}")
     
+    torch.cuda.synchronize()
     nvmath.bindings.cusolverDn.destroy_params(cusolver_params)
 
     return b, factor_infos, solve_infos

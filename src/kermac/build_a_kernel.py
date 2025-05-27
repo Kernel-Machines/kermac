@@ -164,6 +164,7 @@ def run_kernel(
     inner_p : Optional[float] = None,
     outer_p : Optional[float] = None,
     bandwidth : Optional[float] = None,
+    epsilon: Optional[float] = None,
     try_to_align : bool = False,
     debug = False
 ):
@@ -194,6 +195,12 @@ def run_kernel(
     if bandwidth is None:
         if kernel_descriptor._kernel_type is not KernelType.NONE:
             raise ValueError("`bandwidth` is not set but 'kernel_type' is not 'NONE")
+        
+    if epsilon is not None:
+        if kernel_descriptor._kernel_type is KernelType.NONE:
+            raise ValueError("`epsilon` is not set but 'kernel_type' is 'NONE")
+    else:
+        epsilon = 1e-5
         
     # Check if inputs are tensors
     if not isinstance(a, torch.Tensor) or not isinstance(b, torch.Tensor):
@@ -322,6 +329,7 @@ def run_kernel(
         a.data_ptr(),       ld_a,    batch_stride_a,
         b.data_ptr(),       ld_b,    batch_stride_b,
         result.data_ptr(),  ld_c,    batch_stride_c,
+        np.float32(epsilon),
         np.float32(inner_p),
         np.float32(outer_p),
         np.float32(bandwidth)

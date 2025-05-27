@@ -71,8 +71,8 @@ def eigh(
             compute_type
         )
 
-    buffer_on_device = torch.zeros(kermac.ceil_div(device_bytes,4), device=tensor_device, dtype=torch.int32)
-    buffer_on_host = torch.zeros(kermac.ceil_div(host_bytes,4), dtype=torch.int32)
+    buffer_on_device = torch.zeros(L, kermac.ceil_div(device_bytes,4), device=tensor_device, dtype=torch.int32)
+    buffer_on_host = torch.zeros(L, kermac.ceil_div(host_bytes,4), dtype=torch.int32)
 
     infos = torch.ones(L,device=tensor_device,dtype=torch.int32)
 
@@ -80,11 +80,12 @@ def eigh(
     primary_event = torch.cuda.Event(enable_timing=False)
 
     # Record an event on the primary stream so other streams don't race past it
-    primary_event.record(primary_stream)
+    primary_stream.record_event(primary_event)
+    # primary_event.record(primary_stream)
 
     streams = [torch.cuda.Stream() for _ in range(L)]
     events = [torch.cuda.Event(enable_timing=False) for _ in range(L)]
-
+    torch.cuda.synchronize()
     for l in range(L):
         this_stream = streams[l]
         this_event = events[l]
@@ -104,14 +105,14 @@ def eigh(
             data_type_w,
             w[l].data_ptr(),
             compute_type,
-            buffer_on_device.data_ptr(),
+            buffer_on_device[l].data_ptr(),
             device_bytes,
-            buffer_on_host.data_ptr(),
+            buffer_on_host[l].data_ptr(),
             host_bytes,
             infos[l].data_ptr()
         )
 
-        this_event.record(this_stream)
+        this_stream.record_event(this_event)
 
     for event in events:
         # Now make sure that primary_stream synchronizes with all of the work from streams
@@ -128,7 +129,6 @@ def eigh(
         # If there are non-zero errors, raise an exception with the list
         if non_zero_errors:
             raise ValueError(f"Non-zero items found: {non_zero_errors}")
-
     nvmath.bindings.cusolverDn.destroy_params(cusolver_params)
     
     # cusolver uses column-major, need to permute

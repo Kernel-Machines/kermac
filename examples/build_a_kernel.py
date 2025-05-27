@@ -62,6 +62,7 @@ def main():
         a, b,
         out=out,
         bandwidth=10.0,
+        epsilon=1e-5,
         try_to_align=try_to_align,
         debug=debug
     )

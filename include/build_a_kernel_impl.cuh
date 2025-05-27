@@ -24,6 +24,7 @@ cute_build_kernel(
     T const *A, u64 ldA, u64 batch_stride_A,
     T const *B, u64 ldB, u64 batch_stride_B,
     T       *C, u64 ldC, u64 batch_stride_C,
+    T epsilon,
     T p_power_inner,
     T p_power_outer,
     T bandwidth
@@ -148,7 +149,8 @@ cute_build_kernel(
         prob_shape, cta_tiler, thread_tiler, 
         A, dA, sA, copyA,
         B, dB, sB, copyB,
-        C, dC, sC, 
+        C, dC, sC,
+        epsilon,
         p_power_inner,
         p_power_outer,
         bandwidth
@@ -173,6 +175,7 @@ cute_build_kernel(
     float const *A, u64 ldA, u64 batch_stride_A,
     float const *B, u64 ldB, u64 batch_stride_B,
     float       *C, u64 ldC, u64 batch_stride_C,
+    float epsilon,
     float p_power_inner, 
     float p_power_outer,
     float bandwidth
@@ -192,6 +195,7 @@ cute_build_kernel(
         A, ldA, batch_stride_A,
         B, ldB, batch_stride_B,
         C, ldC, batch_stride_C,
+        epsilon,
         p_power_inner,
         p_power_outer,
         bandwidth

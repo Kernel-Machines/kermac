@@ -39,6 +39,7 @@ kernel_cute_build_kernel(
     T const *A, AStride dA, ASmemLayout sA_layout, TiledCopyA copy_a,
     T const *B, BStride dB, BSmemLayout sB_layout, TiledCopyB copy_b,
     T       *C, CStride dC, CSmemLayout,
+    T epsilon,
     T p_power_inner, 
     T p_power_outer,
     T bandwidth
@@ -360,6 +361,18 @@ kernel_cute_build_kernel(
             accum = _nan<T>();
         }
         tCrC(i) = accum;
+    }
+
+    // Apply epsilon mask
+    if constexpr (kernel_type != KernelType::NONE) {
+        CUTE_UNROLL
+        for (int i = 0; i < size(tCrC); i++) {
+            T accum = tCrC(i);
+            if (accum < epsilon) {
+                accum = T(0.0);
+            }
+            tCrC(i) = accum;
+        }
     }
 
     // Apply Kernel
