@@ -7,8 +7,8 @@ class TestCDist(unittest.TestCase):
     def setUp(self):
         """Set up test parameters and device."""
         self.device = torch.device('cuda')
-        self.M = 100  # Smaller sizes for faster tests
-        self.N = 100
+        self.M = 1000  # Smaller sizes for faster tests
+        self.N = 1000
         self.K = 64
         self.L = 2
         self.p_values = [1.0, 1.3, 2.0]  # p-norm values to test
