@@ -103,7 +103,7 @@ with problem size $[M,N,K]$ = $[30000,30000,1024]$
 | **RTX 4090 · p = 2.0**   | **3.4×**  | 77  | 262  |
 
 ## Function: `run_kernel`
-This is a more customizable version of `kermac.cdist`, `kermac.cdist` is written on top of this. `run_kernel` allows a descriptor as one of it's arguments that can create fully fused kernel functions. You can specify the inner-norm type (`abs(x)`, `x*x`, or `pow(x,p)`), the outer-norm type (`x`, `sqrt(x)`, or `pow(x,1/p`)) and finally a laplace or gaussian epilogue. On first run a fully fused kernel will be JIT compiled and cached for future use. This function also allows broadcasting and batching of it's input tensors. See [`build_a_kernel.py`](examples/build_a_kernel.py) for various examples of usage.
+This is a more customizable version of `kermac.cdist`, `kermac.cdist` is written on top of this. `run_kernel` allows a descriptor as one of it's arguments that can create fully fused kernel functions. You can specify the inner-norm type (`abs(x)`, `x*x`, or `pow(x,p)`), the outer-norm type (`x`, `sqrt(x)`, or `pow(x,1/p`)) and finally a laplace or gaussian epilogue. On first run a fully fused kernel will be JIT compiled and cached for future use. This function also allows broadcasting and batching of it's input tensors. See [`build_a_kernel.py`](examples/build_a_kernel.py) for various examples of usage. It also allows batching and broadcasting of it's hyperparameters such as `p`, `bandwidth`, and `regularization`. See [`broadcast_kernel.py`](examples/broadcast_kernel.py) for examples of batching and broadcasting hyperparameters
 
 ## Function: `cdist_grad`
 Computes the gradient of `cdist` in the style like:
