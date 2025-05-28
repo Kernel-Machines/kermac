@@ -413,13 +413,13 @@ def run_kernel(
 
     kernel_args = (
         M, N, K, L,
-        a.data_ptr(),       ld_a,    batch_stride_a,
-        b.data_ptr(),       ld_b,    batch_stride_b,
-        result.data_ptr(),  ld_c,    batch_stride_c,
-        inner_p.data_ptr(), batch_stride_inner_p,
-        outer_p.data_ptr(), batch_stride_outer_p,
-        bandwidth.data_ptr(), batch_stride_bandwidth,
-        regularization.data_ptr(), batch_stride_regularization,
+        a.data_ptr(),       ld_a,   batch_stride_a,
+        b.data_ptr(),       ld_b,   batch_stride_b,
+        result.data_ptr(),  ld_c,   batch_stride_c,
+        inner_p.data_ptr(),         batch_stride_inner_p,
+        outer_p.data_ptr(),         batch_stride_outer_p,
+        bandwidth.data_ptr(),       batch_stride_bandwidth,
+        regularization.data_ptr(),  batch_stride_regularization,
         regularization_offset_x, 
         regularization_offset_y,
         np.float32(epsilon)

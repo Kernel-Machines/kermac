@@ -161,21 +161,21 @@ def cdist_grad(
     grid = (num_blocks_M, num_blocks_N, num_blocks_O)
     config = LaunchConfig(grid=grid, block=block)
 
-    ld_a = a.stride(0)
-    ld_b = b.stride(0)
-    ld_c = c.stride(0)
-    ld_d = d.stride(0)
-    ld_e_N = result.stride(1) 
-    ld_e_O = result.stride(0) # outer-most/slowest-moving/left-most stride
+    ld_a = np.uint64(a.stride(0))
+    ld_b = np.uint64(b.stride(0))
+    ld_c = np.uint64(c.stride(0))
+    ld_d = np.uint64(d.stride(0))
+    ld_e_N = np.uint64(result.stride(1))
+    ld_e_O = np.uint64(result.stride(0)) # outer-most/slowest-moving/left-most stride
 
     kernel_args = (
-        np.float32(p),
         M, N, O, K,
-        a.data_ptr(), ld_a,
-        b.data_ptr(), ld_b,
-        c.data_ptr(), ld_c,
-        d.data_ptr(), ld_d,
-        result.data_ptr(), ld_e_N, ld_e_O
+        a.data_ptr(),       ld_a,
+        b.data_ptr(),       ld_b,
+        c.data_ptr(),       ld_c,
+        d.data_ptr(),       ld_d,
+        result.data_ptr(),  ld_e_N,     ld_e_O,
+        np.float32(p)
     )
 
     launch(stream, config, kernel, *kernel_args)

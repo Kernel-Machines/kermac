@@ -21,13 +21,13 @@ __forceinline__
 void
 cute_build_kernel(
     int m, int n, int k, int l,
-    T const *A, u64 ldA, u64 batch_stride_A,
-    T const *B, u64 ldB, u64 batch_stride_B,
-    T       *C, u64 ldC, u64 batch_stride_C,
-    T *p_power_inner, u64 batch_stride_p_power_inner,
-    T *p_power_outer, u64 batch_stride_p_power_outer,
-    T *bandwidth, u64 batch_stride_bandwidth,
-    T *regularization, u64 batch_stride_regularization,
+    T const *A, u64 ldA,            u64 batch_stride_A,
+    T const *B, u64 ldB,            u64 batch_stride_B,
+    T       *C, u64 ldC,            u64 batch_stride_C,
+    T *p_power_inner,               u64 batch_stride_p_power_inner,
+    T *p_power_outer,               u64 batch_stride_p_power_outer,
+    T *bandwidth,                   u64 batch_stride_bandwidth,
+    T *regularization,              u64 batch_stride_regularization,
     int regularization_offset_x, 
     int regularization_offset_y,
     T epsilon
@@ -183,13 +183,13 @@ __launch_bounds__(256)
 void
 cute_build_kernel(
     int m, int n, int k, int l,
-    float const *A, u64 ldA, u64 batch_stride_A,
-    float const *B, u64 ldB, u64 batch_stride_B,
-    float       *C, u64 ldC, u64 batch_stride_C,
-    float *p_power_inner, u64 batch_stride_p_power_inner, 
-    float *p_power_outer, u64 batch_stride_p_power_outer,
-    float *bandwidth, u64 batch_stride_bandwidth,
-    float *regularization, u64 batch_stride_regularization,
+    float const *A, u64 ldA,        u64 batch_stride_A,
+    float const *B, u64 ldB,        u64 batch_stride_B,
+    float       *C, u64 ldC,        u64 batch_stride_C,
+    float *p_power_inner,           u64 batch_stride_p_power_inner, 
+    float *p_power_outer,           u64 batch_stride_p_power_outer,
+    float *bandwidth,               u64 batch_stride_bandwidth,
+    float *regularization,          u64 batch_stride_regularization,
     int regularization_offset_x, 
     int regularization_offset_y,
     float epsilon
