@@ -83,7 +83,8 @@ def solve_lu(
             compute_type
         )
     
-    print(f'(Kermac Debug) lu_decomposition (problem_size: ({L},{N},{N}), device_bytes_per_batch: {device_bytes})')
+    if debug:
+        print(f'(Kermac Debug) lu_decomposition (problem_size: ({L},{N},{N}), device_bytes_per_batch: {device_bytes})')
 
     buffer_on_device = torch.zeros(L,kermac.ceil_div(device_bytes,4), device=tensor_device, dtype=torch.int32)
     buffer_on_host = torch.zeros(L,kermac.ceil_div(host_bytes,4), dtype=torch.int32)
