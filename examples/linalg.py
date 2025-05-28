@@ -22,6 +22,8 @@ def main():
     M, K, C, L = args.M, args.K, args.C, args.L
     warmup_rounds = args.warmup
     iterations = args.iters
+    debug = args.debug
+    skip_eigh = args.skip_eigh
 
     device = torch.device('cuda')
     timer = kermac.CudaTimer()
@@ -43,7 +45,7 @@ def main():
             b=data,
             out=kernel_matrix,
             bandwidth=10.0,
-            debug=args.debug
+            debug=debug
         )
 
     # Timed run for run_kernel
@@ -56,12 +58,12 @@ def main():
             b=data,
             out=kernel_matrix,
             bandwidth=10.0,
-            debug=args.debug
+            debug=debug
         )
     print(f'Running {iterations} iterations of kermac.run_kernel with size ({L},{M},{K})')
     print(f"\tkermac.run_kernel \t{timer.stop() / iterations:.3f} ms / iteration")
 
-    if not args.skip_eigh:
+    if not skip_eigh:
         print('***EIGH***')
         # Warmup for eigh
         print(f'Warmup {warmup_rounds} iterations of kermac.linalg.eigh with size ({L},{M},{M})')
@@ -112,7 +114,8 @@ def main():
             b=labels_clobber,
             overwrite_a=True,
             overwrite_b=True,
-            check_errors=False
+            check_errors=False,
+            debug=debug
         )
     torch.cuda.synchronize()
    
@@ -125,7 +128,7 @@ def main():
 
     print('***LU***')
     # Warmup for solve_lu
-    print(f'Warmup {iterations} iterations of kermac.linalg.solve_lu with size ({L},{M},{M}) and labels ({L},{C},{M})')
+    print(f'Warmup {warmup_rounds} iterations of kermac.linalg.solve_lu with size ({L},{M},{M}) and labels ({L},{C},{M})')
     for _ in range(warmup_rounds):
         labels_clobber = labels.clone()
         kernel_matrix_clobber = kernel_matrix.clone()
@@ -134,7 +137,8 @@ def main():
             b=labels_clobber,
             overwrite_a=True,
             overwrite_b=True,
-            check_errors=False
+            check_errors=False,
+            debug=debug
         )
     torch.cuda.synchronize()
 
@@ -149,7 +153,8 @@ def main():
             b=labels_clobber,
             overwrite_a=True,
             overwrite_b=True,
-            check_errors=False
+            check_errors=False,
+            debug=debug
         )
     torch.cuda.synchronize()
     

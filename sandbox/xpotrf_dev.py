@@ -27,7 +27,7 @@ kernel_matrix_saved = kernel_matrix.clone()
 labels_saved = labels.clone()
 
 sol, factor_info, solve_info = \
-    kermac.linalg.solve_lu(
+    kermac.linalg.solve_cholesky(
         a=kernel_matrix, 
         b=labels,
         overwrite_a=True,

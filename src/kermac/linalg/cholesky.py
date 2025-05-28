@@ -13,7 +13,8 @@ def solve_cholesky(
     fill_mode : kermac.FillMode = kermac.FillMode.LOWER,
     overwrite_a : bool = False,
     overwrite_b : bool = False,
-    check_errors : bool = False
+    check_errors : bool = False,
+    debug : bool = False
 ):
     # Check if inputs are tensors
     if not isinstance(a, torch.Tensor) or not isinstance(b, torch.Tensor):
@@ -83,6 +84,8 @@ def solve_cholesky(
             stride_a,
             compute_type
         )
+    
+    print(f'(Kermac Debug) cholesky (problem_size: ({L},{N},{N}), device_bytes_per_batch: {device_bytes})')
 
     buffer_on_device = torch.zeros(L,kermac.ceil_div(device_bytes,4), device=tensor_device, dtype=torch.int32)
     buffer_on_host = torch.zeros(L,kermac.ceil_div(host_bytes,4), dtype=torch.int32)
