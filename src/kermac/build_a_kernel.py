@@ -4,7 +4,7 @@ from .module_cache.module_cache import *
 from .common import *
 
 from enum import Enum, auto
-from typing import Optional, List
+from typing import Optional, List, Union
 
 import torch
 import numpy as np
@@ -160,58 +160,76 @@ def run_kernel(
     a : torch.Tensor,
     b : torch.Tensor,
     out : torch.Tensor = None,
-    p : Optional[float] = None,
-    inner_p : Optional[float] = None,
-    outer_p : Optional[float] = None,
-    bandwidth : Optional[float] = None,
-    epsilon: Optional[float] = None,
+    p :         Optional[Union[float, torch.Tensor]] = None,
+    inner_p :   Optional[Union[float, torch.Tensor]] = None,
+    outer_p :   Optional[Union[float, torch.Tensor]] = None,
+    bandwidth : Optional[Union[float, torch.Tensor]] = None,
+    epsilon:    Optional[Union[float, torch.Tensor]] = None,
+    regularization: Optional[Union[float, torch.Tensor]] = None,
     try_to_align : bool = False,
     debug = False
 ):
-    if p is not None:
-        if kernel_descriptor._inner_power is not PowerType.POW and kernel_descriptor._outer_power is not PowerType.POW:
-            raise ValueError("`p` is set but kernel doesn't use the value")
-        if inner_p is not None:
-            raise ValueError("`inner_p` is set but 'p' is also set")
-        if outer_p is not None:
-            raise ValueError("`outer_p` is set but 'p' is also set")
-
-    if inner_p is not None:
-        if kernel_descriptor._inner_power is not PowerType.POW:
-            raise ValueError("`inner_p` is set but 'inner_power' is not 'POW")
-        
-    if outer_p is not None:
-        if kernel_descriptor._outer_power is not PowerType.POW:
-            raise ValueError("`outer_p` is set but 'outer_power' is not 'POW")
-
-    if p is not None:
-        inner_p = p     # if p is set then interpret that we want p
-        outer_p = 1.0/p # and recip-p
-    
-    if inner_p is None:
-        if kernel_descriptor._inner_power is PowerType.POW:
-            raise ValueError("`inner_p` is not set but kernel inner_power is 'POW'")
-        inner_p = 0.0
-
-    if outer_p is None:
-        if kernel_descriptor._outer_power is PowerType.POW:
-            raise ValueError("`outer_p` is not set but kernel outer_power is 'POW'")
-        outer_p = 0.0
-
-    if bandwidth is not None:
-        if kernel_descriptor._kernel_type is KernelType.NONE:
-             raise ValueError("`bandwidth` is set but 'kernel_type' is 'NONE")
-        
-    if bandwidth is None:
-        if kernel_descriptor._kernel_type is not KernelType.NONE:
-            raise ValueError("`bandwidth` is not set but 'kernel_type' is not 'NONE")
-        bandwidth = 0.0
-        
-    if epsilon is not None:
-        if kernel_descriptor._kernel_type is KernelType.NONE:
-            raise ValueError("`epsilon` is not set but 'kernel_type' is 'NONE")
+    if kernel_descriptor._inner_power is PowerType.POW:
+        if p is None and inner_p is None:
+            raise ValueError("'inner_power' 'PowerType' is 'Pow' but 'p' and 'inner_p' is not set")
     else:
+        if p is not None or inner_p is not None:
+            raise ValueError("'inner_power' 'PowerType' is not 'Pow' but 'p' or 'inner_p' is set")
+        
+    if kernel_descriptor._outer_power is PowerType.POW:
+        if p is None and outer_p is None:
+            raise ValueError("'outer_power' 'PowerType' is 'Pow' but 'p' and 'outer_p' is not set")
+    else:
+        if p is not None or outer_p is not None:
+            raise ValueError("'outer_power' 'PowerType' is not 'Pow' but 'p' or 'outer_p' is set")
+        
+    if kernel_descriptor._kernel_type is KernelType.NONE:
+        if bandwidth is not None or epsilon is not None or regularization is not None:
+            raise ValueError("'KernelType' is 'None' but 'bandwidth' or 'epsilon' or 'regularization' is set")
+    else:
+        if bandwidth is None:
+            raise ValueError("'KernelType' is not 'None' but 'bandwidth' is not set")
+        
+    if p is not None and inner_p is not None:
+        raise ValueError("'p' is not 'None' but 'inner_p' is also not 'None")
+    
+    if p is not None and outer_p is not None:
+        raise ValueError("'p' is not 'None' but 'outer_p' is also not 'None")
+    
+    if epsilon is None:
         epsilon = 1e-5
+
+    if bandwidth is None:
+        bandwidth = 0.0
+    
+    if regularization is None:
+        regularization = 0.0
+
+    def merge_batch_size(L, this_L):
+        if this_L != 1 and L != 1 and this_L != L:
+            raise ValueError("batch sizes don't match up")
+        return max(L, this_L)
+
+    def merge_batch_size_of_hyperparameter(L, x):
+        if x is None:
+            return L
+        elif isinstance(x, torch.Tensor):
+            if x.dim() != 0 and x.dim() != 1:
+                raise ValueError("hyperparameter tensor is neither 0 or 1 dimensional")
+            if x.dim() == 1:
+                this_L = x.size()
+                return merge_batch_size(L, this_L)
+        elif isinstance(x, float):
+            return L
+        else:
+            raise ValueError("hyperparameter is wrong type")
+
+    L = 1
+    L = merge_batch_size_of_hyperparameter(L,p)
+    L = merge_batch_size_of_hyperparameter(L,inner_p)
+    L = merge_batch_size_of_hyperparameter(L,outer_p)
+    L = merge_batch_size_of_hyperparameter(L,bandwidth)
+    L = merge_batch_size_of_hyperparameter(L,regularization)
         
     # Check if inputs are tensors
     if not isinstance(a, torch.Tensor) or not isinstance(b, torch.Tensor):
@@ -256,13 +274,8 @@ def run_kernel(
     
     K = K_a
 
-    # If one tensor has batch size 1 and the other doesn't we can broadcast
-    L = max(L_a, L_b)
-    if L_a != L and L_a != 1:
-        raise ValueError(f"a must have batch dimension (L={L_a}), got {(L)}")
-    
-    if L_b != L and L_b != 1:
-        raise ValueError(f"b must have batch dimension (L={L_b}), got {(L)}")
+    L = merge_batch_size(L, L_a)
+    L = merge_batch_size(L, L_b)
     
     if out is not None:
         tensor_stats_c = tensor_stats(out)
@@ -273,9 +286,57 @@ def run_kernel(
             raise ValueError(f"out must have batch dimension (L={L}), got {(L_c)}")
         L = L_c
     else:
-        out = torch.zeros((L, M, N), dtype=torch.float32, device=a.device)
-        tensor_stats_c = tensor_stats(out)   
+        out = torch.zeros((L, M, N), dtype=torch.float32, device=tensor_device)
+        tensor_stats_c = tensor_stats(out)
 
+    # L is decided now
+    if inner_p is not None:
+        if isinstance(inner_p, float):
+            inner_p = torch.tensor(inner_p, dtype=torch.float32, device=tensor_device)
+        else: # must be torch.tensor
+            if inner_p.dtype != torch.float32:
+                raise TypeError("`inner_p` tensor must have dtype torch.float32")
+            if not inner_p.is_cuda or inner_p.device != tensor_device:
+                raise ValueError("`inner_p` tensor must be on the same CUDA device as inputs")
+            
+    if outer_p is not None:
+        if isinstance(outer_p, float):
+            outer_p = torch.tensor(outer_p, dtype=torch.float32, device=tensor_device)
+        else: # must be torch.tensor
+            if outer_p.dtype != torch.float32:
+                raise TypeError("`outer_p` tensor must have dtype torch.float32")
+            if not outer_p.is_cuda or outer_p.device != tensor_device:
+                raise ValueError("`outer_p` tensor must be on the same CUDA device as inputs")
+
+    if p is not None:
+        if isinstance(p, float):
+            inner_p = torch.tensor(p, dtype=torch.float32, device=tensor_device)
+        else: # must be torch.tensor
+            if p.dtype != torch.float32:
+                raise TypeError("`p` tensor must have dtype torch.float32")
+            if not p.is_cuda or p.device != tensor_device:
+                raise ValueError("`p` tensor must be on the same CUDA device as inputs")
+            inner_p = p.contiguous()
+        outer_p = 1.0 / inner_p
+
+    if bandwidth is not None:
+        if isinstance(bandwidth, float):
+            bandwidth = torch.tensor(bandwidth, dtype=torch.float32, device=tensor_device)
+        else:
+            if bandwidth.dtype != torch.float32:
+                raise TypeError("`bandwidth` tensor must have dtype torch.float32")
+            if not bandwidth.is_cuda or bandwidth.device != tensor_device:
+                raise ValueError("`bandwidth` tensor must be on the same CUDA device as inputs")
+            
+    if regularization is not None:
+        if isinstance(regularization, float):
+            regularization = torch.tensor(regularization, dtype=torch.float32, device=tensor_device)
+        else:
+            if regularization.dtype != torch.float32:
+                raise TypeError("`regularization` tensor must have dtype torch.float32")
+            if not regularization.is_cuda or regularization.device != tensor_device:
+                raise ValueError("`regularization` tensor must be on the same CUDA device as inputs")
+            
     result = out
 
     module_cache = ModuleCache(debug)
@@ -335,23 +396,26 @@ def run_kernel(
     ld_c = np.uint64(tensor_stats_c.leading_dimension_stride)
     batch_stride_c = np.uint64(tensor_stats_c.batch_stride)
 
-    inner_p_tensor = torch.tensor(inner_p, dtype=torch.float32, device=pt_device)
-    batch_stride_inner_p = np.uint64(0)
+    if inner_p is None:
+        inner_p = torch.tensor(0.0, dtype=torch.float32, device=tensor_device)
 
-    outer_p_tensor = torch.tensor(outer_p, dtype=torch.float32, device=pt_device)
-    batch_stride_outer_p = np.uint64(0)
+    if outer_p is None:
+        outer_p = torch.tensor(0.0, dtype=torch.float32, device=tensor_device)
 
-    bandwidth_tensor = torch.tensor(bandwidth, dtype=torch.float32, device=pt_device)
-    batch_stride_bandwidth = np.uint64(0)
+    batch_stride_inner_p = np.uint64(0 if inner_p.dim() == 0 else 1)
+    batch_stride_outer_p = np.uint64(0 if outer_p.dim() == 0 else 1)
+    batch_stride_bandwidth = np.uint64(0 if bandwidth.dim() == 0 else 1)
+    batch_stride_regularization = np.uint64(0 if regularization.dim() == 0 else 1)
 
     kernel_args = (
         M, N, K, L,
         a.data_ptr(),       ld_a,    batch_stride_a,
         b.data_ptr(),       ld_b,    batch_stride_b,
         result.data_ptr(),  ld_c,    batch_stride_c,
-        inner_p_tensor.data_ptr(), batch_stride_inner_p,
-        outer_p_tensor.data_ptr(), batch_stride_outer_p,
-        bandwidth_tensor.data_ptr(), batch_stride_bandwidth,
+        inner_p.data_ptr(), batch_stride_inner_p,
+        outer_p.data_ptr(), batch_stride_outer_p,
+        bandwidth.data_ptr(), batch_stride_bandwidth,
+        regularization.data_ptr(), batch_stride_regularization,
         np.float32(epsilon)
     )
 

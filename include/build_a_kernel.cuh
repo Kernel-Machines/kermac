@@ -32,6 +32,7 @@ template <
     class PPIStride,
     class PPOStride,
     class BANDWIDTHStride,
+    class REGULARIZATIONStride,
     class T
 >
 __device__
@@ -45,6 +46,7 @@ kernel_cute_build_kernel(
     T *PPI, PPIStride dPPI, 
     T *PPO, PPOStride dPPO,
     T *BANDWIDTH, BANDWIDTHStride dBANDWIDTH,
+    T *REGULARIZATION, REGULARIZATIONStride dREGULARIZATION,
     T epsilon
 ) {
     using namespace cute;
@@ -82,6 +84,7 @@ kernel_cute_build_kernel(
     Tensor mPPI = make_tensor(make_gmem_ptr(PPI), select<3>(shape_MNKL), dPPI);
     Tensor mPPO = make_tensor(make_gmem_ptr(PPO), select<3>(shape_MNKL), dPPO);
     Tensor mBANDWIDTH = make_tensor(make_gmem_ptr(BANDWIDTH), select<3>(shape_MNKL), dBANDWIDTH);
+    Tensor mREGULARIZATION = make_tensor(make_gmem_ptr(REGULARIZATION), select<3>(shape_MNKL), dREGULARIZATION);
 
     auto bidx = blockIdx.x;
     auto bidy = blockIdx.y;
@@ -90,6 +93,7 @@ kernel_cute_build_kernel(
     T p_power_inner = T(0);
     T p_power_outer = T(0);
     T bandwidth = T(0);
+    T regularization = T(0);
 
     if constexpr (inner_power == PowerType::POW) {
         p_power_inner = mPPI(bidz);
@@ -101,6 +105,7 @@ kernel_cute_build_kernel(
 
     if constexpr (kernel_type != KernelType::NONE) {
         bandwidth = mBANDWIDTH(bidz);
+        regularization = mREGULARIZATION(bidz);
     }
 
     auto cta_coord = make_coord(bidx, bidy, _); // (m,n,k)
@@ -419,6 +424,22 @@ kernel_cute_build_kernel(
             accum = _nan<T>();
         }
         tCrC(i) = accum;
+    }
+
+    // if (thread0()) {
+    //     print("tCrC : "); print(tCrC); print("\n");
+    //     print("tCcC : "); print(tCcC); print("\n");
+    // }
+    // return;
+    if constexpr (kernel_type != KernelType::NONE) {
+        CUTE_UNROLL
+        for (int i = 0; i < size(tCrC); i++) {
+            T accum = tCrC(i);
+            if (bidx == bidy && get<0>(tCcC(i)) == get<1>(tCcC(i))) {
+                accum = accum + regularization;
+            }
+            tCrC(i) = accum;
+        }
     }
 
     // Write accumulators

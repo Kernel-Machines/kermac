@@ -27,6 +27,7 @@ cute_build_kernel(
     T *p_power_inner, u64 batch_stride_p_power_inner,
     T *p_power_outer, u64 batch_stride_p_power_outer,
     T *bandwidth, u64 batch_stride_bandwidth,
+    T *regularization, u64 batch_stride_regularization,
     T epsilon
 ) {
     // Don't support ALIGN_4 specialization for ROW_MAJOR tensors
@@ -66,6 +67,7 @@ cute_build_kernel(
     auto d_p_power_inner = make_stride(batch_stride_p_power_inner);
     auto d_p_power_outer = make_stride(batch_stride_p_power_outer);
     auto d_bandwidth = make_stride(batch_stride_bandwidth);
+    auto d_regularization = make_stride(batch_stride_regularization);
 
     auto sA = [bM,bK,bP] {
         if constexpr (majorness_A == Majorness::COL_MAJOR) {
@@ -157,6 +159,7 @@ cute_build_kernel(
         p_power_inner, d_p_power_inner,
         p_power_outer, d_p_power_outer,
         bandwidth, d_bandwidth,
+        regularization, d_regularization,
         epsilon
     );
 }
@@ -182,6 +185,7 @@ cute_build_kernel(
     float *p_power_inner, u64 batch_stride_p_power_inner, 
     float *p_power_outer, u64 batch_stride_p_power_outer,
     float *bandwidth, u64 batch_stride_bandwidth,
+    float *regularization, u64 batch_stride_regularization,
     float epsilon
 ) {
     cute_build_kernel<
@@ -202,6 +206,7 @@ cute_build_kernel(
         p_power_inner, batch_stride_p_power_inner,
         p_power_outer, batch_stride_p_power_outer,
         bandwidth, batch_stride_bandwidth,
+        regularization, batch_stride_regularization,
         epsilon
     );
 }
