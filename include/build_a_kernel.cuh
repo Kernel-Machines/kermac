@@ -47,6 +47,8 @@ kernel_cute_build_kernel(
     T *PPO, PPOStride dPPO,
     T *BANDWIDTH, BANDWIDTHStride dBANDWIDTH,
     T *REGULARIZATION, REGULARIZATIONStride dREGULARIZATION,
+    int regularization_offset_x, 
+    int regularization_offset_y,
     T epsilon
 ) {
     using namespace cute;
@@ -426,19 +428,23 @@ kernel_cute_build_kernel(
         tCrC(i) = accum;
     }
 
-    // if (thread0()) {
-    //     print("tCrC : "); print(tCrC); print("\n");
-    //     print("tCcC : "); print(tCcC); print("\n");
-    // }
-    // return;
+    // Apply regularization
     if constexpr (kernel_type != KernelType::NONE) {
-        CUTE_UNROLL
-        for (int i = 0; i < size(tCrC); i++) {
-            T accum = tCrC(i);
-            if (bidx == bidy && get<0>(tCcC(i)) == get<1>(tCcC(i))) {
-                accum = accum + regularization;
+        if (regularization != T(0.0)) {
+            auto block_coord_x = size<0>(gA) * bidx;
+            auto block_coord_y = size<0>(gB) * bidy;
+            CUTE_UNROLL
+            for (int i = 0; i < size(tCrC); i++) {
+                T accum = tCrC(i);
+                auto thread_coord_x = get<0>(tCcC(i));
+                auto thread_coord_y = get<1>(tCcC(i));
+                auto full_coord_x = regularization_offset_x + block_coord_x + thread_coord_x;
+                auto full_coord_y = regularization_offset_y + block_coord_y + thread_coord_y;
+                if (full_coord_x == full_coord_y) {
+                    accum = 1.0 + regularization;
+                }
+                tCrC(i) = accum;
             }
-            tCrC(i) = accum;
         }
     }
 

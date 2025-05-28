@@ -28,6 +28,8 @@ cute_build_kernel(
     T *p_power_outer, u64 batch_stride_p_power_outer,
     T *bandwidth, u64 batch_stride_bandwidth,
     T *regularization, u64 batch_stride_regularization,
+    int regularization_offset_x, 
+    int regularization_offset_y,
     T epsilon
 ) {
     // Don't support ALIGN_4 specialization for ROW_MAJOR tensors
@@ -160,6 +162,8 @@ cute_build_kernel(
         p_power_outer, d_p_power_outer,
         bandwidth, d_bandwidth,
         regularization, d_regularization,
+        regularization_offset_x, 
+        regularization_offset_y,
         epsilon
     );
 }
@@ -186,6 +190,8 @@ cute_build_kernel(
     float *p_power_outer, u64 batch_stride_p_power_outer,
     float *bandwidth, u64 batch_stride_bandwidth,
     float *regularization, u64 batch_stride_regularization,
+    int regularization_offset_x, 
+    int regularization_offset_y,
     float epsilon
 ) {
     cute_build_kernel<
@@ -207,6 +213,8 @@ cute_build_kernel(
         p_power_outer, batch_stride_p_power_outer,
         bandwidth, batch_stride_bandwidth,
         regularization, batch_stride_regularization,
+        regularization_offset_x, 
+        regularization_offset_y,
         epsilon
     );
 }

@@ -166,6 +166,8 @@ def run_kernel(
     bandwidth : Optional[Union[float, torch.Tensor]] = None,
     epsilon:    Optional[Union[float, torch.Tensor]] = None,
     regularization: Optional[Union[float, torch.Tensor]] = None,
+    regularization_offset_x : int = 0,
+    regularization_offset_y : int = 0,
     try_to_align : bool = False,
     debug = False
 ):
@@ -216,8 +218,10 @@ def run_kernel(
         elif isinstance(x, torch.Tensor):
             if x.dim() != 0 and x.dim() != 1:
                 raise ValueError("hyperparameter tensor is neither 0 or 1 dimensional")
+            if x.dim() == 0:
+                return 1
             if x.dim() == 1:
-                this_L = x.size()
+                this_L = x.size(0)
                 return merge_batch_size(L, this_L)
         elif isinstance(x, float):
             return L
@@ -416,6 +420,8 @@ def run_kernel(
         outer_p.data_ptr(), batch_stride_outer_p,
         bandwidth.data_ptr(), batch_stride_bandwidth,
         regularization.data_ptr(), batch_stride_regularization,
+        regularization_offset_x, 
+        regularization_offset_y,
         np.float32(epsilon)
     )
 
