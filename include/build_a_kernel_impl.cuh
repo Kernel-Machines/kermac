@@ -24,10 +24,10 @@ cute_build_kernel(
     T const *A, u64 ldA, u64 batch_stride_A,
     T const *B, u64 ldB, u64 batch_stride_B,
     T       *C, u64 ldC, u64 batch_stride_C,
-    T epsilon,
-    T p_power_inner,
-    T p_power_outer,
-    T bandwidth
+    T *p_power_inner, u64 batch_stride_p_power_inner,
+    T *p_power_outer, u64 batch_stride_p_power_outer,
+    T *bandwidth, u64 batch_stride_bandwidth,
+    T epsilon
 ) {
     // Don't support ALIGN_4 specialization for ROW_MAJOR tensors
     static_assert(majorness_A != Majorness::ROW_MAJOR || align_A != Alignment::ALIGN_4);
@@ -62,6 +62,10 @@ cute_build_kernel(
         }
     }();
     auto dC = make_stride(Int<1>{}, ldC, batch_stride_C);
+
+    auto d_p_power_inner = make_stride(batch_stride_p_power_inner);
+    auto d_p_power_outer = make_stride(batch_stride_p_power_outer);
+    auto d_bandwidth = make_stride(batch_stride_bandwidth);
 
     auto sA = [bM,bK,bP] {
         if constexpr (majorness_A == Majorness::COL_MAJOR) {
@@ -150,10 +154,10 @@ cute_build_kernel(
         A, dA, sA, copyA,
         B, dB, sB, copyB,
         C, dC, sC,
-        epsilon,
-        p_power_inner,
-        p_power_outer,
-        bandwidth
+        p_power_inner, d_p_power_inner,
+        p_power_outer, d_p_power_outer,
+        bandwidth, d_bandwidth,
+        epsilon
     );
 }
 
@@ -175,10 +179,10 @@ cute_build_kernel(
     float const *A, u64 ldA, u64 batch_stride_A,
     float const *B, u64 ldB, u64 batch_stride_B,
     float       *C, u64 ldC, u64 batch_stride_C,
-    float epsilon,
-    float p_power_inner, 
-    float p_power_outer,
-    float bandwidth
+    float *p_power_inner, u64 batch_stride_p_power_inner, 
+    float *p_power_outer, u64 batch_stride_p_power_outer,
+    float *bandwidth, u64 batch_stride_bandwidth,
+    float epsilon
 ) {
     cute_build_kernel<
         true, true,
@@ -195,9 +199,9 @@ cute_build_kernel(
         A, ldA, batch_stride_A,
         B, ldB, batch_stride_B,
         C, ldC, batch_stride_C,
-        epsilon,
-        p_power_inner,
-        p_power_outer,
-        bandwidth
+        p_power_inner, batch_stride_p_power_inner,
+        p_power_outer, batch_stride_p_power_outer,
+        bandwidth, batch_stride_bandwidth,
+        epsilon
     );
 }

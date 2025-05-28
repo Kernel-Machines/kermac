@@ -187,6 +187,16 @@ def run_kernel(
     if p is not None:
         inner_p = p     # if p is set then interpret that we want p
         outer_p = 1.0/p # and recip-p
+    
+    if inner_p is None:
+        if kernel_descriptor._inner_power is PowerType.POW:
+            raise ValueError("`inner_p` is not set but kernel inner_power is 'POW'")
+        inner_p = 0.0
+
+    if outer_p is None:
+        if kernel_descriptor._outer_power is PowerType.POW:
+            raise ValueError("`outer_p` is not set but kernel outer_power is 'POW'")
+        outer_p = 0.0
 
     if bandwidth is not None:
         if kernel_descriptor._kernel_type is KernelType.NONE:
@@ -195,6 +205,7 @@ def run_kernel(
     if bandwidth is None:
         if kernel_descriptor._kernel_type is not KernelType.NONE:
             raise ValueError("`bandwidth` is not set but 'kernel_type' is not 'NONE")
+        bandwidth = 0.0
         
     if epsilon is not None:
         if kernel_descriptor._kernel_type is KernelType.NONE:
@@ -324,15 +335,24 @@ def run_kernel(
     ld_c = np.uint64(tensor_stats_c.leading_dimension_stride)
     batch_stride_c = np.uint64(tensor_stats_c.batch_stride)
 
+    inner_p_tensor = torch.tensor(inner_p, dtype=torch.float32, device=pt_device)
+    batch_stride_inner_p = np.uint64(0)
+
+    outer_p_tensor = torch.tensor(outer_p, dtype=torch.float32, device=pt_device)
+    batch_stride_outer_p = np.uint64(0)
+
+    bandwidth_tensor = torch.tensor(bandwidth, dtype=torch.float32, device=pt_device)
+    batch_stride_bandwidth = np.uint64(0)
+
     kernel_args = (
         M, N, K, L,
         a.data_ptr(),       ld_a,    batch_stride_a,
         b.data_ptr(),       ld_b,    batch_stride_b,
         result.data_ptr(),  ld_c,    batch_stride_c,
-        np.float32(epsilon),
-        np.float32(inner_p),
-        np.float32(outer_p),
-        np.float32(bandwidth)
+        inner_p_tensor.data_ptr(), batch_stride_inner_p,
+        outer_p_tensor.data_ptr(), batch_stride_outer_p,
+        bandwidth_tensor.data_ptr(), batch_stride_bandwidth,
+        np.float32(epsilon)
     )
 
     launch(stream, config, kernel, *kernel_args)

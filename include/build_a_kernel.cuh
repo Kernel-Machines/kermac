@@ -29,6 +29,9 @@ template <
     class AStride, class ASmemLayout, class TiledCopyA,
     class BStride, class BSmemLayout, class TiledCopyB,
     class CStride, class CSmemLayout,
+    class PPIStride,
+    class PPOStride,
+    class BANDWIDTHStride,
     class T
 >
 __device__
@@ -39,10 +42,10 @@ kernel_cute_build_kernel(
     T const *A, AStride dA, ASmemLayout sA_layout, TiledCopyA copy_a,
     T const *B, BStride dB, BSmemLayout sB_layout, TiledCopyB copy_b,
     T       *C, CStride dC, CSmemLayout,
-    T epsilon,
-    T p_power_inner, 
-    T p_power_outer,
-    T bandwidth
+    T *PPI, PPIStride dPPI, 
+    T *PPO, PPOStride dPPO,
+    T *BANDWIDTH, BANDWIDTHStride dBANDWIDTH,
+    T epsilon
 ) {
     using namespace cute;
 
@@ -76,9 +79,29 @@ kernel_cute_build_kernel(
     Tensor mB = make_tensor(make_gmem_ptr(B), select<1,2,3>(shape_MNKL), dB); // (N,K,L)
     Tensor mC = make_tensor(make_gmem_ptr(C), select<0,1,3>(shape_MNKL), dC); // (M,N,L)
 
+    Tensor mPPI = make_tensor(make_gmem_ptr(PPI), select<3>(shape_MNKL), dPPI);
+    Tensor mPPO = make_tensor(make_gmem_ptr(PPO), select<3>(shape_MNKL), dPPO);
+    Tensor mBANDWIDTH = make_tensor(make_gmem_ptr(BANDWIDTH), select<3>(shape_MNKL), dBANDWIDTH);
+
     auto bidx = blockIdx.x;
     auto bidy = blockIdx.y;
     auto bidz = blockIdx.z;
+
+    T p_power_inner = T(0);
+    T p_power_outer = T(0);
+    T bandwidth = T(0);
+
+    if constexpr (inner_power == PowerType::POW) {
+        p_power_inner = mPPI(bidz);
+    }
+
+    if constexpr (outer_power == PowerType::POW) {
+        p_power_outer = mPPO(bidz);
+    }
+
+    if constexpr (kernel_type != KernelType::NONE) {
+        bandwidth = mBANDWIDTH(bidz);
+    }
 
     auto cta_coord = make_coord(bidx, bidy, _); // (m,n,k)
     Tensor gA = local_tile(mA(_,_,bidz), cta_tiler, cta_coord, Step<_1,  X, _1>{}); // (BLK_M,BLK_K,k)
