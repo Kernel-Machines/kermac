@@ -379,7 +379,7 @@ def run_kernel(
         M, N, K, L,
         a.data_ptr(),       ld_a,   batch_stride_a,
         b.data_ptr(),       ld_b,   batch_stride_b,
-        out.data_ptr(),  ld_c,   batch_stride_c,
+        out.data_ptr(),     ld_c,   batch_stride_c,
         inner_p.data_ptr(),         batch_stride_inner_p,
         outer_p.data_ptr(),         batch_stride_outer_p,
         bandwidth.data_ptr(),       batch_stride_bandwidth,

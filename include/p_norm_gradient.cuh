@@ -55,8 +55,8 @@ kernel_cute_p_norm_kernel_gradient(
     CUTE_STATIC_ASSERT_V(rank(thread_tiler) == Int<3>{}); // (THR_M, THR_N, THR_O)
 
     CUTE_STATIC_ASSERT_V(size(copy_a) == size(thread_tiler)); // NumThreads
-    CUTE_STATIC_ASSERT_V(size(copy_b) == size(thread_tiler)); // NumThreads
-    CUTE_STATIC_ASSERT_V(size(copy_c) == size(thread_tiler)); // NumThreads
+    // CUTE_STATIC_ASSERT_V(size(copy_b) == size(thread_tiler)); // NumThreads
+    // CUTE_STATIC_ASSERT_V(size(copy_c) == size(thread_tiler)); // NumThreads
 
     static_assert(is_static<ASmemLayout>::value);
     static_assert(is_static<BSmemLayout>::value);
@@ -278,13 +278,13 @@ kernel_cute_p_norm_kernel_gradient(
             Tensor tBgBk = tBgB(_,_,_,k_tile_next);
             for (int k = 0; k < size<2>(tBsB); ++k) {
                 if (get<1>(tBcB(0,0,k)) >= -k_residue) { // blk_k coord < residue_k (gB shifted)
-                    copy_if(copy_b, tBpB(_,k), tBgBk(_,_,k), tBsB(_,_,k,k_pipe));
+                    if (threadIdx.x < size(copy_b)) copy_if(copy_b, tBpB(_,k), tBgBk(_,_,k), tBsB(_,_,k,k_pipe));
                 }
             }
             Tensor tCgCk = tCgC(_,_,_,k_tile_next);
             for (int k = 0; k < size<2>(tCsC); ++k) {
                 if (get<1>(tCcC(0,0,k)) >= -k_residue) { // blk_k coord < residue_k (gC shifted)
-                    copy_if(copy_c, tCpC(_,k), tCgCk(_,_,k), tCsC(_,_,k,k_pipe));
+                    if (threadIdx.x < size(copy_c)) copy_if(copy_c, tCpC(_,k), tCgCk(_,_,k), tCsC(_,_,k,k_pipe));
                 }
             }
             cp_async_fence();
@@ -302,8 +302,8 @@ kernel_cute_p_norm_kernel_gradient(
                 clear(tCpC);
             }
             copy_if(copy_a, tApA, tAgA(_,_,_,k_tile_next), tAsA(_,_,_,k_pipe));
-            copy_if(copy_b, tBpB, tBgB(_,_,_,k_tile_next), tBsB(_,_,_,k_pipe));
-            copy_if(copy_c, tCpC, tCgC(_,_,_,k_tile_next), tCsC(_,_,_,k_pipe));
+            if (threadIdx.x < size(copy_b)) copy_if(copy_b, tBpB, tBgB(_,_,_,k_tile_next), tBsB(_,_,_,k_pipe));
+            if (threadIdx.x < size(copy_c)) copy_if(copy_c, tCpC, tCgC(_,_,_,k_tile_next), tCsC(_,_,_,k_pipe));
             cp_async_fence();
             --k_tile_count;
             if (k_tile_count > 0) { ++k_tile_next; }
@@ -318,8 +318,8 @@ kernel_cute_p_norm_kernel_gradient(
         CUTE_UNROLL
         for (int k_pipe = 0; k_pipe < K_PIPE_MAX-1; ++k_pipe) {
             copy(copy_a, tAgA(_,_,_,k_tile_next), tAsA(_,_,_,k_pipe));
-            copy(copy_b, tBgB(_,_,_,k_tile_next), tBsB(_,_,_,k_pipe));
-            copy(copy_c, tCgC(_,_,_,k_tile_next), tCsC(_,_,_,k_pipe));
+            if (threadIdx.x < size(copy_b)) copy(copy_b, tBgB(_,_,_,k_tile_next), tBsB(_,_,_,k_pipe));
+            if (threadIdx.x < size(copy_c)) copy(copy_c, tCgC(_,_,_,k_tile_next), tCsC(_,_,_,k_pipe));
             cp_async_fence();
             --k_tile_count;
             if (k_tile_count > 0) { ++k_tile_next; }
@@ -376,8 +376,8 @@ kernel_cute_p_norm_kernel_gradient(
                         clear(tCpC);
                     }
                     copy_if(copy_a, tApA, tAgA(_,_,_,k_tile_next), tAsA(_,_,_,smem_pipe_write));
-                    copy_if(copy_b, tBpB, tBgB(_,_,_,k_tile_next), tBsB(_,_,_,smem_pipe_write));
-                    copy_if(copy_c, tCpC, tCgC(_,_,_,k_tile_next), tCsC(_,_,_,smem_pipe_write));
+                    if (threadIdx.x < size(copy_b)) copy_if(copy_b, tBpB, tBgB(_,_,_,k_tile_next), tBsB(_,_,_,smem_pipe_write));
+                    if (threadIdx.x < size(copy_c)) copy_if(copy_c, tCpC, tCgC(_,_,_,k_tile_next), tCsC(_,_,_,smem_pipe_write));
                 } else { // No predicated reads
                     copy(copy_a, tAgA(_,_,_,k_tile_next), tAsA(_,_,_,smem_pipe_write));
                     copy(copy_b, tBgB(_,_,_,k_tile_next), tBsB(_,_,_,smem_pipe_write));
@@ -477,23 +477,23 @@ cute_norm_kernel_gradient(
     auto bM = Int<128>{};
     auto bN = Int<16>{};
     auto bO = Int<16>{};
-    auto bK = Int<32>{};
+    auto bK = Int<8>{};
     auto cta_tiler = make_shape(bM, bN, bO, bK);
     auto bP = Int<2>{};
 
-    auto thread_tiler = Layout<Shape<_32, _8, _1>>{}; // M, N, O
+    auto thread_tiler = Layout<Shape<_16, _16, _1>>{}; // M, N, O
 
     auto sA = make_layout(make_shape(bM, bK, bP)); // M-major
     
     auto sB_atom = make_layout(
         make_shape(bN, bK),
-        make_stride(Int<1>{}, bN)
+        make_stride(Int<1>{}, bN+Int<4>{})
     ); // (n,k) -> smem_idx; padded n-major
     auto sB = tile_to_shape(sB_atom, make_shape(bN, bK, bP)); // N-major
 
     auto sC_atom = make_layout(
         make_shape(bO, bK),
-        make_stride(Int<1>{}, bO)
+        make_stride(Int<1>{}, bO+Int<4>{})
     ); // (o,k) -> smem_idx; padded o-major
     auto sC = tile_to_shape(sC_atom, make_shape(bO, bK, bP)); // O-major
 
@@ -508,13 +508,13 @@ cute_norm_kernel_gradient(
 
     TiledCopy copyB = make_tiled_copy(
         Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
-        Layout<Shape<_8,_32>, Stride<_32,_1>>{}, // Thr layout 8x32 k-major
+        Layout<Shape<_16,_8>, Stride<_8,_1>>{}, // Thr layout 8x32 k-major
         Layout<Shape< _1,_1>>{} // Val layout  1x1
     );
 
     TiledCopy copyC = make_tiled_copy(
         Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
-        Layout<Shape<_8,_32>, Stride<_32,_1>>{}, // Thr layout 8x32 k-major
+        Layout<Shape<_16,_8>, Stride<_8,_1>>{}, // Thr layout 8x32 k-major
         Layout<Shape< _1,_1>>{} // Val layout  1x1 
     );
 
