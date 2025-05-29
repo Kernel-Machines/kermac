@@ -462,6 +462,82 @@ kernel_cute_build_kernel(
     }
 }
 
+template <
+    Majorness majorness,
+    typename LdType, 
+    typename BatchStrideType
+>
+__forceinline__
+auto 
+make_general_stride(
+    LdType ld, 
+    BatchStrideType batch_stride
+) {
+    using namespace cute;
+    if constexpr (majorness == Majorness::COL_MAJOR) {
+        return make_stride(Int<1>{}, ld, batch_stride);
+    } else {
+        return make_stride(ld, Int<1>{}, batch_stride);
+    }
+};
+
+template <
+    Majorness majorness, 
+    typename Dim1Type, 
+    typename Dim2Type, 
+    typename Dim3Type
+>
+__forceinline__
+auto 
+make_general_layout(
+    Dim1Type dim1, 
+    Dim2Type dim2, 
+    Dim3Type dim3
+) {
+    using namespace cute;
+    if constexpr (majorness == Majorness::COL_MAJOR) {
+        return make_layout(make_shape(dim1, dim2, dim3));
+    } else {
+        auto atom = make_layout(
+            make_shape(dim1, dim2),
+            make_stride(Int<1>{}, dim1 + Int<4>{})
+        );
+        return tile_to_shape(atom, make_shape(dim1, dim2, dim3));
+    }
+};
+
+template <
+    typename T, 
+    Majorness majorness, 
+    Alignment align
+>
+__forceinline__
+auto 
+make_general_tiled_copy() {
+    using namespace cute;
+    if constexpr (majorness == Majorness::COL_MAJOR) {
+        if constexpr (align == Alignment::ALIGN_4) {
+            return make_tiled_copy(
+                Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<uint128_t>, T>{},
+                Layout<Shape<_32, _8>>{},
+                Layout<Shape<_4, _1>>{}
+            );
+        } else {
+            return make_tiled_copy(
+                Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
+                Layout<Shape<_32, _8>>{},
+                Layout<Shape<_1, _1>>{}
+            );
+        }
+    } else {
+        return make_tiled_copy(
+            Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
+            Layout<Shape<_32,_8>, Stride<_8,_1>>{},
+            Layout<Shape<_1,_1>>{}
+        );
+    }
+};
+
 template<
     InnerOperator inner_operator,
     PowerType inner_power,
@@ -507,99 +583,21 @@ cute_build_kernel(
     auto bP = Int<3>{};
 
     auto prob_shape = make_shape(M,N,K,L);
-    auto dA = [ldA, batch_stride_A] { 
-        if constexpr(majorness_A == Majorness::COL_MAJOR) {
-            return make_stride(Int<1>{}, ldA, batch_stride_A);
-        } else {
-            return make_stride(ldA, Int<1>{}, batch_stride_A);
-        }
-    }();
-    auto dB = [ldB, batch_stride_B] { 
-        if constexpr (majorness_B == Majorness::COL_MAJOR) {
-            return make_stride(Int<1>{}, ldB, batch_stride_B);
-        } else {
-            return make_stride(ldB, Int<1>{}, batch_stride_B);
-        }
-    }();
-    auto dC = make_stride(Int<1>{}, ldC, batch_stride_C);
+    auto dA = make_general_stride<majorness_A>(ldA, batch_stride_A);
+    auto dB = make_general_stride<majorness_B>(ldB, batch_stride_B);
+    auto dC = make_general_stride<Majorness::COL_MAJOR>(ldC, batch_stride_C);
 
     auto d_p_power_inner = make_stride(batch_stride_p_power_inner);
     auto d_p_power_outer = make_stride(batch_stride_p_power_outer);
     auto d_bandwidth = make_stride(batch_stride_bandwidth);
     auto d_regularization = make_stride(batch_stride_regularization);
 
-    auto sA = [bM,bK,bP] {
-        if constexpr (majorness_A == Majorness::COL_MAJOR) {
-            return make_layout(make_shape(bM, bK, bP));
-        } else {
-            auto atom = make_layout(
-                make_shape(bM,bK),
-                make_stride(Int<1>{}, bM+Int<4>{})
-            );
-            return tile_to_shape(atom, make_shape(bM, bK, bP));
-        }
-    }();
-    auto sB = [bN,bK,bP] {
-        if constexpr (majorness_B == Majorness::COL_MAJOR) {
-            return make_layout(make_shape(bN, bK, bP));
-        } else {
-            auto atom = make_layout(
-                make_shape(bN,bK),
-                make_stride(Int<1>{}, bN+Int<4>{})
-            );
-            return tile_to_shape(atom, make_shape(bN, bK, bP));
-        }
-    }();
-    
+    auto sA = make_general_layout<majorness_A>(bM, bK, bP);
+    auto sB = make_general_layout<majorness_B>(bN, bK, bP);
     auto sC = make_layout(make_shape(bM, bN));
-    
-    auto copyA = [] {
-        if constexpr (majorness_A == Majorness::COL_MAJOR) {
-            if constexpr (align_A == Alignment::ALIGN_4) {
-                return make_tiled_copy(
-                    Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<uint128_t>, T>{},
-                    Layout<Shape<_32, _8>>{},
-                    Layout<Shape<_4, _1>>{}
-                );
-            } else {
-                return make_tiled_copy(
-                    Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
-                    Layout<Shape<_32, _8>>{},
-                    Layout<Shape<_1, _1>>{}
-                );
-            }
-        } else {
-            return make_tiled_copy(
-                Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
-                Layout<Shape<_32,_8>, Stride<_8,_1>>{},
-                Layout<Shape< _1,_1>>{}
-            );
-        }
-    }();
 
-    auto copyB = [] {
-        if constexpr (majorness_B == Majorness::COL_MAJOR) {
-            if constexpr (align_B == Alignment::ALIGN_4) {
-                return make_tiled_copy(
-                    Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<uint128_t>, T>{},
-                    Layout<Shape<_32, _8>>{},
-                    Layout<Shape<_4, _1>>{}
-                );
-            } else {
-                return make_tiled_copy(
-                    Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
-                    Layout<Shape<_32, _8>>{},
-                    Layout<Shape<_1, _1>>{}
-                );
-            }
-        } else {
-            return make_tiled_copy(
-                Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
-                Layout<Shape<_32,_8>, Stride<_8,_1>>{},
-                Layout<Shape< _1,_1>>{}
-            );
-        }
-    }();
+    auto copyA = make_general_tiled_copy<T, majorness_A, align_A>();
+    auto copyB = make_general_tiled_copy<T, majorness_B, align_B>();
 
     auto thread_tiler = Layout<Shape<_16,_16>>{}; // M, N
 
