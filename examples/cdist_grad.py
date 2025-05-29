@@ -14,12 +14,26 @@ def parse_args():
     parser.add_argument('-d','--debug', default=False, action='store_true', help='Enable debug output (default: True)')
     parser.add_argument('--skip_torch_einsum', default=False, action='store_true', help='Skip running torch einsum. Helps avoid memory errors.')
     parser.add_argument('--skip_numeric_compare', default=False, action='store_true', help='Skip comparing torch and kermac results. Helps avoid memory errors.')
+    parser.add_argument('--warmup', type=int, default=1, help='Number of warmup rounds (default:1)')
+    parser.add_argument('--iters', type=int, default=1, help='Number of iteration rounds (default:1)')
     return parser.parse_args()
+
+def torch_cdist_grad(
+    coefs,
+    kernel_matrix,
+    x,
+    z
+):
+    torch_out = torch.einsum('bli,bij,bjd->bljd', coefs, kernel_matrix, z.permute(0,2,1)) - torch.einsum('bli,bij,bid->bljd', coefs, kernel_matrix, x.permute(0,2,1))
+    return torch_out.permute(0,1,3,2)
 
 def main():
     args = parse_args()
     M, N, O, K, L, p = args.M, args.N, args.O, args.K, args.L, args.p
     debug = args.debug
+    warmup_rounds = args.warmup
+    iterations = args.iters
+    skip_torch = args.skip_torch_einsum
 
     device = torch.device('cuda')
     timer = kermac.CudaTimer()
@@ -30,18 +44,26 @@ def main():
     size_N = K
     size_L = L
 
-    if debug: 
-        print('\n(Kermac Debug) Warmup kermac.cdist_grad')
-    kermac.cdist_grad(
-        torch.randn(2,10,100,device=device),
-        torch.randn(2,32,10,device=device),
-        torch.randn(2,16,10,device=device),
-        torch.randn(2,32,100,device=device),
-        p = p,
-        debug = debug
-    )
-
+    print(f'Warmup {warmup_rounds} iterations of kermac.cdist_grad')
+    for _ in range(warmup_rounds):
+        kermac.cdist_grad(
+            torch.randn(2,10,100,device=device),
+            torch.randn(2,32,10,device=device),
+            torch.randn(2,16,10,device=device),
+            torch.randn(2,32,100,device=device),
+            p = p,
+            debug = debug
+        )
     torch.cuda.synchronize()
+    if not skip_torch:
+        for _ in range(warmup_rounds):
+            torch_cdist_grad(
+                torch.randn(2,16,10,device=device),
+                torch.randn(2,10,100,device=device),
+                torch.randn(2,32,10,device=device),
+                torch.randn(2,32,100,device=device),
+            )
+        torch.cuda.synchronize()
 
     tensor_A = torch.randn(size_L,size_N,size_M,device=device) # M-major # M-major 
     tensor_B = torch.randn(size_L,size_D,size_N,device=device) # N-major # K-major
@@ -60,29 +82,31 @@ def main():
     if debug: 
         print('\n(Kermac Debug) Running kermac.cdist_grad')
     timer.start()
-    kermac_out = kermac.cdist_grad(
-        tensor_A,
-        tensor_B,
-        tensor_C,
-        tensor_D,
-        out = tensor_E,
-        p = p,
-        debug = debug
-    )
+    for _ in range(iterations):
+        kermac_out = kermac.cdist_grad(
+            tensor_A,
+            tensor_B,
+            tensor_C,
+            tensor_D,
+            out = tensor_E,
+            p = p,
+            debug = debug
+        )
     if debug:
         print('')
-    print(f'Running p-norm-gradient={p} with size ({L},{K},{M}) by ({L},{N},{K}) by ({L},{O},{K}) by ({L},{N},{M}) = ({L},{O},{N},{M})')
-    print(f"\tkermac.cdist_grad \t\t{timer.stop():.3f} ms")
+    print(f'Running {iterations} iterations of p-norm-gradient={p} with size ({L},{K},{M}) by ({L},{N},{K}) by ({L},{O},{K}) by ({L},{N},{M}) => ({L},{O},{N},{M})')
+    print(f"\tkermac.cdist_grad \t\t{timer.stop() / iterations:.3f} ms / iteration")
 
     if not p == 2.0:
         print('Cannot compare timing or results to torch unless p=2.0')
         exit()
-    if args.skip_torch_einsum:
+    if skip_torch:
         exit()
     try:
         timer.start()
-        torch_out = torch.einsum('bli,bij,bjd->bljd', coefs, kernel_matrix, z.permute(0,2,1)) - torch.einsum('bli,bij,bid->bljd', coefs, kernel_matrix, x.permute(0,2,1))
-        print(f"\ttorch-einsum-cdist_grad\t\t{timer.stop():.3f} ms")
+        for _ in range(iterations):
+            torch_out = torch_cdist_grad(coefs,kernel_matrix,x,z)
+        print(f"\ttorch-einsum-cdist_grad\t\t{timer.stop():.3f} ms / iteration")
     except Exception as e:
         print(f'Exception: {e}')
         print('\nYou can use argument \'--skip_torch_einsum\' to skip running torch einsum and avoid the slow allocation and eventual exception')
@@ -90,7 +114,7 @@ def main():
 
     if not args.skip_numeric_compare:
         try:
-            diff = kermac_out.permute(0,1,3,2) - torch_out
+            diff = kermac_out - torch_out
             squared_diff = diff ** 2
             mse = torch.mean(squared_diff)
             rmse = torch.sqrt(mse).item()
