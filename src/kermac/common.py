@@ -44,6 +44,11 @@ class CudaTimer:
 def ceil_div(x, d):
     return int((x + d - 1) // d)
 
+def merge_batch_size(L, this_L):
+    if this_L != 1 and L != 1 and this_L != L:
+        raise ValueError("batch sizes don't match up")
+    return max(L, this_L)
+
 class TensorStats:
     def __init__(self, tensor: torch.Tensor):
         if tensor.dim() not in (2, 3):

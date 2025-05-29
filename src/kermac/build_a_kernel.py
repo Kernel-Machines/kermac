@@ -207,11 +207,6 @@ def run_kernel(
     if regularization is None:
         regularization = 0.0
 
-    def merge_batch_size(L, this_L):
-        if this_L != 1 and L != 1 and this_L != L:
-            raise ValueError("batch sizes don't match up")
-        return max(L, this_L)
-
     def merge_batch_size_of_hyperparameter(L, x):
         if x is None:
             return L

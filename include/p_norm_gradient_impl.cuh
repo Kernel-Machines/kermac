@@ -12,13 +12,13 @@ template <
 __device__
 __forceinline__
 void
-cute_p_norm_kernel_gradient_m128n16o16k32p2(
-    int m, int n, int o, int k,
-    T const *A, u64 ldA,        // kernel_matrix   M,N     m,k
-    T const *B, u64 ldB,        // data_N          N,D     k,n
-    T const *C, u64 ldC,        // solution        N,C     k,o
-    T const *D, u64 ldD,        // data_M          M,D     m,n
-    T *E,       u64 ldE_N, u64 ldE_O,  // grad            M,D,C   m,n,o
+cute_p_norm_kernel_gradient(
+    int m, int n, int o, int k, int l,
+    T const *A, u64 ldA,                u64 batch_stride_a, // kernel_matrix   M,N     m,k
+    T const *B, u64 ldB,                u64 batch_stride_b, // data_N          N,D     k,n
+    T const *C, u64 ldC,                u64 batch_stride_c, // solution        N,C     k,o
+    T const *D, u64 ldD,                u64 batch_stride_d, // data_M          M,D     m,n
+    T *E,       u64 ldE_N, u64 ldE_O,   u64 batch_stride_e, // grad            M,D,C   m,n,o
     T p_power
 ) {
     using namespace cute;
@@ -27,6 +27,7 @@ cute_p_norm_kernel_gradient_m128n16o16k32p2(
     auto N = u64(n);
     auto O = u64(o);
     auto K = u64(k);
+    auto L = u64(l);
 
     auto prob_shape = make_shape(M,N,O,K);
 
@@ -113,45 +114,25 @@ template <
 __global__
 __launch_bounds__(256)
 void
-cute_norm_kernel_gradient_m128n16o16k32p2(
-    int m, int n, int o, int k,
-    float const *A, u64 ldA,        // kernel_matrix   M,N     m,k
-    float const *B, u64 ldB,        // data_N          N,D     k,n
-    float const *C, u64 ldC,        // solution        N,C     k,o
-    float const *D, u64 ldD,        // data_M          M,D     m,n
-    float *E, u64 ldE_N, u64 ldE_O,
-    float p_power
+cute_norm_kernel_gradient(
+    int m, int n, int o, int k, int l,
+    float const *A,     u64 ldA,              u64 batch_stride_a,  // kernel_matrix   M,N     m,k
+    float const *B,     u64 ldB,              u64 batch_stride_b,  // data_N          N,D     k,n
+    float const *C,     u64 ldC,              u64 batch_stride_c,  // solution        N,C     k,o
+    float const *D,     u64 ldD,              u64 batch_stride_d,  // data_M          M,D     m,n
+    float *E,           u64 ldE_N, u64 ldE_O, u64 batch_stride_e,
+    float p_power_grad
 ) {
-    if constexpr (norm_type == NormType::L1) {
-        cute_p_norm_kernel_gradient_m128n16o16k32p2<true, true, NormType::L1>(
-            m, n, o, k,
-            A, ldA, 
-            B, ldB,
-            C, ldC,
-            D, ldD,
-            E, ldE_N, ldE_O,
-            c_zero<float>
-        );
-    } else if constexpr (norm_type == NormType::L2) {
-        cute_p_norm_kernel_gradient_m128n16o16k32p2<true, true, NormType::L2>(
-            m, n, o, k,
-            A, ldA, 
-            B, ldB,
-            C, ldC,
-            D, ldD,
-            E, ldE_N, ldE_O,
-            c_zero<float>
-        );
-    } else {
-        float p_power_grad = p_power-c_one<float>;
-        cute_p_norm_kernel_gradient_m128n16o16k32p2<true, true, NormType::P>(
-            m, n, o, k,
-            A, ldA, 
-            B, ldB,
-            C, ldC,
-            D, ldD,
-            E, ldE_N, ldE_O,
-            p_power_grad
-        );
-    }
+    cute_p_norm_kernel_gradient<
+        true, true, 
+        norm_type
+    >(
+        m, n, o, k, l,
+        A, ldA,             batch_stride_a,
+        B, ldB,             batch_stride_b,
+        C, ldC,             batch_stride_c,
+        D, ldD,             batch_stride_d,
+        E, ldE_N,   ldE_O,  batch_stride_e,
+        p_power_grad
+    );
 }
