@@ -1,6 +1,6 @@
 import torch
 from enum import Enum, auto
-from typing import Tuple
+from typing import Tuple, Union
 
 class Majorness(Enum):
     COL_MAJOR = auto()
@@ -44,28 +44,30 @@ class CudaTimer:
 def ceil_div(x, d):
     return int((x + d - 1) // d)
 
-def merge_batch_size(L, this_L):
-    if this_L != 1 and L != 1 and this_L != L:
-        raise ValueError("batch sizes don't match up")
-    return max(L, this_L)
-
-def merge_batch_size_of_hyperparameter(L, x):
-    if x is None:
+def merge_batch_size(
+    name : str,
+    L, # previous batch size
+    a : Union[float, torch.tensor],
+    expected_dims : int,
+    can_be_none: bool = False,
+):
+    if a is None:
+        if not can_be_none:
+            raise ValueError(f'{name} is none, but can_be_none is False')
         return L
-    elif isinstance(x, torch.Tensor):
-        if not x.is_contiguous():
-            raise ValueError("hyperparameter tensor needs to be contiguous")
-        if x.dim() != 0 and x.dim() != 1:
-            raise ValueError("hyperparameter tensor is neither 0 or 1 dimensional")
-        if x.dim() == 0:
-            return 1
-        if x.dim() == 1:
-            this_L = x.size(0)
-            return merge_batch_size(L, this_L)
-    elif isinstance(x, float):
+    elif isinstance(a, float):
+        if expected_dims != 0:
+            raise ValueError(f'{name} is a float but expected_dims is {expected_dims}')
         return L
-    else:
-        raise ValueError("hyperparameter is wrong type")
+    elif isinstance(a, torch.Tensor):
+        if a.dim() == expected_dims:
+            return L
+        if a.dim() == expected_dims + 1:
+            this_L = a.size(0)
+            if this_L != 1 and L != 1 and this_L != L:
+                raise ValueError(f'{name} batch size of {this_L} does not match with another non-one batch size, {L}')
+            return max(L, this_L)
+        raise ValueError(f'{name} does have the right number of dimensions, expected_dims is {expected_dims} or {expected_dims+1}, got {a.dim()}')
 
 class TensorStats:
     def __init__(self, tensor: torch.Tensor):

@@ -102,7 +102,7 @@ kernel_cute_p_norm_kernel_gradient(
     T p_power_grad = T(0);
 
     if constexpr (norm_type == NormType::P) {
-        p_power_grad = mP(bidw);
+        p_power_grad = mP(bidw) - 1.0;
     }
 
     auto cta_coord = make_coord(bidx, bidy, bidz, _); // (m,n,o,k)

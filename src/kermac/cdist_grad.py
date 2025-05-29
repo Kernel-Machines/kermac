@@ -99,31 +99,23 @@ def cdist_grad(
     tensor_stats_c = tensor_stats(c)
     tensor_stats_d = tensor_stats(d)
     
-    L_a, K_a, M_a = tensor_stats_a.shape
-    L_b, N_b, K_b = tensor_stats_b.shape
-    L_c, O_c, K_c = tensor_stats_c.shape
-    L_d, N_d, M_d = tensor_stats_d.shape
+    _, K_a, M_a = tensor_stats_a.shape
+    _, N_b, K_b = tensor_stats_b.shape
+    _, O_c, K_c = tensor_stats_c.shape
+    _, N_d, M_d = tensor_stats_d.shape
 
     L = 1
-    L = merge_batch_size_of_hyperparameter(L,p)
-    L = merge_batch_size(L, L_a)
-    L = merge_batch_size(L, L_b)
-    L = merge_batch_size(L, L_c)
-    L = merge_batch_size(L, L_d)
+    L = merge_batch_size('p', L, p, expected_dims=0, can_be_none=False)
+    L = merge_batch_size('a', L, a, expected_dims=2, can_be_none=False)
+    L = merge_batch_size('b', L, b, expected_dims=2, can_be_none=False)
+    L = merge_batch_size('c', L, c, expected_dims=2, can_be_none=False)
+    L = merge_batch_size('d', L, d, expected_dims=2, can_be_none=False)
+    L = merge_batch_size('out', L, out, expected_dims=3, can_be_none=True)
 
-    L_e = 1
-    if out is None:
-        L_e = L
-    else:
-        if out.dim() == 3:
-            L_e = 1
-        else:
-            L_e = out.size(0)
-
-    L = merge_batch_size(L, L_e)
-
-    if L_e == 1 and L != 1:
-        raise ValueError(f"out batch size must be as large as the implied batch size from the other tensors: got {L_e}, expected {L}")
+    if out is not None:
+        L_e = 1 if out.dim() == 2 else out.size(0)
+        if L_e != L and L != 1:
+            raise ValueError(f"out must have batch dimension (L={L}), got {(L_e)}")
 
     # L is decided
     K = K_a
@@ -173,7 +165,7 @@ def cdist_grad(
     if out is not None and out.stride(-1) != 1:
         raise ValueError("out must have stride 1 in last dimension")
     
-    result = torch.zeros((L, O, N, M), dtype=torch.float32, device=tensor_device) if out is None else out
+    out = torch.zeros((L, O, N, M), dtype=torch.float32, device=tensor_device) if out is None else out
 
     module_cache = ModuleCache(debug)
 
@@ -203,20 +195,15 @@ def cdist_grad(
     if debug:
         print(f'(Kermac Debug) Launching kernel: {function_string}')
 
-    p_tensor = p-1.0
+    p_tensor = p
 
-    bM = 128
-    bN = 16
-    bO = 16
-
-    block = 256
-    num_blocks_M = ceil_div(M, bM)
-    num_blocks_N = ceil_div(N, bN)
-    num_blocks_O = ceil_div(O, bO)
+    num_blocks_M = ceil_div(M, 128)
+    num_blocks_N = ceil_div(N, 16)
+    num_blocks_O = ceil_div(O, 16)
     num_blocks_L = L
 
     grid = (num_blocks_L*num_blocks_M, num_blocks_N, num_blocks_O)
-    config = LaunchConfig(grid=grid, block=block)
+    config = LaunchConfig(grid=grid, block=256)
 
     ld_a = np.uint64(tensor_stats_a.leading_dimension_stride)
     batch_stride_a = np.uint64(tensor_stats_a.batch_stride)
@@ -230,9 +217,9 @@ def cdist_grad(
     ld_d = np.uint64(tensor_stats_d.leading_dimension_stride)
     batch_stride_d = np.uint64(tensor_stats_d.batch_stride)
 
-    ld_e_N = np.uint64(result.stride(-2))
-    ld_e_O = np.uint64(result.stride(-3)) # outer-most/slowest-moving/left-most stride
-    batch_stride_e = np.uint64(0 if L == 1 else result.stride(-4))
+    ld_e_N = np.uint64(out.stride(-2))
+    ld_e_O = np.uint64(out.stride(-3)) # outer-most/slowest-moving/left-most stride
+    batch_stride_e = np.uint64(0 if L == 1 else out.stride(-4))
 
     batch_stride_p = np.uint64(0 if p_tensor.numel() == 1 else 1)
 
@@ -243,10 +230,10 @@ def cdist_grad(
         b.data_ptr(),       ld_b,                   batch_stride_b,
         c.data_ptr(),       ld_c,                   batch_stride_c,
         d.data_ptr(),       ld_d,                   batch_stride_d,
-        result.data_ptr(),  ld_e_N,     ld_e_O,     batch_stride_e,
+        out.data_ptr(),     ld_e_N,     ld_e_O,     batch_stride_e,
         p_tensor.data_ptr(),                        batch_stride_p
     )
 
     launch(stream, config, kernel, *kernel_args)
 
-    return result
+    return out

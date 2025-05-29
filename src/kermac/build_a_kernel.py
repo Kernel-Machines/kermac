@@ -164,7 +164,7 @@ def run_kernel(
     inner_p :   Optional[Union[float, torch.Tensor]] = None,
     outer_p :   Optional[Union[float, torch.Tensor]] = None,
     bandwidth : Optional[Union[float, torch.Tensor]] = None,
-    epsilon:    Optional[Union[float, torch.Tensor]] = None,
+    epsilon:    Optional[float] = None,
     regularization: Optional[Union[float, torch.Tensor]] = None,
     regularization_offset_x : int = 0,
     regularization_offset_y : int = 0,
@@ -197,22 +197,18 @@ def run_kernel(
     
     if p is not None and outer_p is not None:
         raise ValueError("'p' is not 'None' but 'outer_p' is also not 'None")
-    
-    if epsilon is None:
-        epsilon = 1e-5
 
-    if bandwidth is None:
-        bandwidth = 0.0
-    
-    if regularization is None:
-        regularization = 0.0
-
+    # batch sizes can always be 1 or L, if we merge two L's that are not equal and both 
+    # are not 1 then we have a problem
     L = 1
-    L = merge_batch_size_of_hyperparameter(L,p)
-    L = merge_batch_size_of_hyperparameter(L,inner_p)
-    L = merge_batch_size_of_hyperparameter(L,outer_p)
-    L = merge_batch_size_of_hyperparameter(L,bandwidth)
-    L = merge_batch_size_of_hyperparameter(L,regularization)
+    L = merge_batch_size('p', L, p, expected_dims=0, can_be_none=True)
+    L = merge_batch_size('inner_p', L, inner_p, expected_dims=0, can_be_none=True)
+    L = merge_batch_size('outer_p', L, outer_p, expected_dims=0, can_be_none=True)
+    L = merge_batch_size('bandwidth', L, bandwidth, expected_dims=0, can_be_none=True)
+    L = merge_batch_size('regularization', L, regularization, expected_dims=0, can_be_none=True)
+    L = merge_batch_size('a', L, a, expected_dims=2, can_be_none=False)
+    L = merge_batch_size('b', L, b, expected_dims=2, can_be_none=False)
+    L = merge_batch_size('out', L, out, expected_dims=2, can_be_none=True)
         
     # Check if inputs are tensors
     if not isinstance(a, torch.Tensor) or not isinstance(b, torch.Tensor):
@@ -225,12 +221,6 @@ def run_kernel(
         raise TypeError("a and b must have dtype torch.float32")
     if out is not None and out.dtype != torch.float32:
         raise TypeError("out must have dtype torch.float32")
-
-    # Check number of dimensions
-    if a.dim() not in (2, 3) or b.dim() not in (2, 3):
-        raise ValueError("a and b must be 2-dimensional")
-    if out is not None and out.dim() not in (2,3):
-        raise ValueError("out must be 2-dimensional")
 
     # Check CUDA device
     if not a.is_cuda or not b.is_cuda:
@@ -248,26 +238,23 @@ def run_kernel(
     tensor_stats_b = tensor_stats(b)
 
     # Get shapes
-    L_a, M, K_a = tensor_stats_a.shape
-    L_b, N, K_b = tensor_stats_b.shape
+    _, M, K_a = tensor_stats_a.shape
+    _, N, K_b = tensor_stats_b.shape
 
     # Check shape consistency
     if K_a != K_b:
         raise ValueError(f"K dimensions must match: got {K_a} for a and {K_b} for b")
     
     K = K_a
-
-    L = merge_batch_size(L, L_a)
-    L = merge_batch_size(L, L_b)
     
     if out is not None:
+        L_c = 1 if out.dim() == 2 else out.size(0)
         tensor_stats_c = tensor_stats(out)
-        L_c, M_c, N_c = tensor_stats_c.shape
+        _, M_c, N_c = tensor_stats_c.shape
         if (M_c, N_c) != (M,N):
             raise ValueError(f"out must have shape (M={M}, N={N}), got {(M_c, N_c)}")
         if L_c != L and L != 1:
             raise ValueError(f"out must have batch dimension (L={L}), got {(L_c)}")
-        L = L_c
     else:
         out = torch.zeros((L, M, N), dtype=torch.float32, device=tensor_device)
         tensor_stats_c = tensor_stats(out)
@@ -302,26 +289,26 @@ def run_kernel(
             inner_p = p.contiguous()
         outer_p = 1.0 / inner_p
 
-    if bandwidth is not None:
-        if isinstance(bandwidth, float):
-            bandwidth = torch.tensor(bandwidth, dtype=torch.float32, device=tensor_device)
-        else:
-            if bandwidth.dtype != torch.float32:
-                raise TypeError("`bandwidth` tensor must have dtype torch.float32")
-            if not bandwidth.is_cuda or bandwidth.device != tensor_device:
-                raise ValueError("`bandwidth` tensor must be on the same CUDA device as inputs")
+    if bandwidth is None:
+        bandwidth = 0.0
+    if isinstance(bandwidth, float):
+        bandwidth = torch.tensor(bandwidth, dtype=torch.float32, device=tensor_device)
+    else:
+        if bandwidth.dtype != torch.float32:
+            raise TypeError("`bandwidth` tensor must have dtype torch.float32")
+        if not bandwidth.is_cuda or bandwidth.device != tensor_device:
+            raise ValueError("`bandwidth` tensor must be on the same CUDA device as inputs")
+    
+    if regularization is None:
+        regularization = 0.0
+    if isinstance(regularization, float):
+        regularization = torch.tensor(regularization, dtype=torch.float32, device=tensor_device)
+    else:
+        if regularization.dtype != torch.float32:
+            raise TypeError("`regularization` tensor must have dtype torch.float32")
+        if not regularization.is_cuda or regularization.device != tensor_device:
+            raise ValueError("`regularization` tensor must be on the same CUDA device as inputs")
             
-    if regularization is not None:
-        if isinstance(regularization, float):
-            regularization = torch.tensor(regularization, dtype=torch.float32, device=tensor_device)
-        else:
-            if regularization.dtype != torch.float32:
-                raise TypeError("`regularization` tensor must have dtype torch.float32")
-            if not regularization.is_cuda or regularization.device != tensor_device:
-                raise ValueError("`regularization` tensor must be on the same CUDA device as inputs")
-            
-    result = out
-
     module_cache = ModuleCache(debug)
    
     pt_stream = torch.cuda.current_stream()
@@ -352,23 +339,18 @@ def run_kernel(
     align_4_A = Alignment.ALIGN_1 if not try_to_align else tensor_stats_a.alignment
     align_4_B = Alignment.ALIGN_1 if not try_to_align else tensor_stats_b.alignment
 
-    bM = 128
-    bN = 128
-
-    block = 256
-
     function_name = kernel_descriptor._render_function_name(tensor_stats_a.majorness, tensor_stats_b.majorness, align_4_A, align_4_B)
     kernel = module_cache.get_function(device, function_name, debug=debug)
 
     if debug:
         print(f'(Kermac Debug) Launching kernel: {function_name}')
 
-    num_blocks_M = ceil_div(M, bM)
-    num_blocks_N = ceil_div(N, bN)
+    num_blocks_M = ceil_div(M, 128)
+    num_blocks_N = ceil_div(N, 128)
     num_batches = L
 
     grid = (num_blocks_M, num_blocks_N, num_batches)
-    config = LaunchConfig(grid=grid, block=block)
+    config = LaunchConfig(grid=grid, block=256)
 
     ld_a = np.uint64(tensor_stats_a.leading_dimension_stride)
     batch_stride_a = np.uint64(tensor_stats_a.batch_stride)
@@ -390,11 +372,14 @@ def run_kernel(
     batch_stride_bandwidth = np.uint64(0 if bandwidth.dim() == 0 else 1)
     batch_stride_regularization = np.uint64(0 if regularization.dim() == 0 else 1)
 
+    if epsilon is None:
+        epsilon = 1e-5
+
     kernel_args = (
         M, N, K, L,
         a.data_ptr(),       ld_a,   batch_stride_a,
         b.data_ptr(),       ld_b,   batch_stride_b,
-        result.data_ptr(),  ld_c,   batch_stride_c,
+        out.data_ptr(),  ld_c,   batch_stride_c,
         inner_p.data_ptr(),         batch_stride_inner_p,
         outer_p.data_ptr(),         batch_stride_outer_p,
         bandwidth.data_ptr(),       batch_stride_bandwidth,
@@ -406,4 +391,4 @@ def run_kernel(
 
     launch(stream, config, kernel, *kernel_args)
 
-    return result
+    return out

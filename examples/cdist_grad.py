@@ -44,8 +44,8 @@ def main():
     size_N = K
     size_L = L
 
-    # tensor_p = torch.full((1,), p, dtype=torch.float32, device=device)
-    tensor_p = torch.tensor([2.0, 2.0], dtype=torch.float32, device=device)
+    tensor_p = torch.full((1,), p, dtype=torch.float32, device=device)
+    # tensor_p = torch.tensor([2.0, 2.0], dtype=torch.float32, device=device)
 
     tensor_mini_A = torch.randn(2,10,100,device=device)
     tensor_mini_B = torch.randn(2,32,10,device=device)

@@ -125,7 +125,7 @@ cute_norm_kernel_gradient(
     float const *C,     u64 ldC,                u64 batch_stride_c,  // solution        N,C     k,o
     float const *D,     u64 ldD,                u64 batch_stride_d,  // data_M          M,D     m,n
     float *E,           u64 ldE_N, u64 ldE_O,   u64 batch_stride_e,
-    float *p_power_grad,                        u64 batch_stride_p
+    float *p_power,                        u64 batch_stride_p
 ) {
     cute_p_norm_kernel_gradient<
         true, true, 
@@ -138,6 +138,6 @@ cute_norm_kernel_gradient(
         C, ldC,             batch_stride_c,
         D, ldD,             batch_stride_d,
         E, ldE_N,   ldE_O,  batch_stride_e,
-        p_power_grad,       batch_stride_p
+        p_power,       batch_stride_p
     );
 }
