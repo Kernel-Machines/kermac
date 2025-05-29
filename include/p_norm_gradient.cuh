@@ -37,7 +37,7 @@ __forceinline__
 void
 kernel_cute_p_norm_kernel_gradient(
     ProblemShape shape_MNOKL, CtaTiler cta_tiler, ThreadTiler thread_tiler,
-    int num_blocks_M,
+    i32 num_blocks_M,
     T const *A, AStride dA, ASmemLayout sA_layout, TiledCopyA copy_a,
     T const *B, BStride dB, BSmemLayout sB_layout, TiledCopyB copy_b,
     T const *C, CStride dC, CSmemLayout sC_layout, TiledCopyC copy_c,
@@ -438,4 +438,97 @@ kernel_cute_p_norm_kernel_gradient(
             tEgE(i) = tErE(i);
         }
     }
+}
+
+template <
+    NormType norm_type
+>
+__global__
+__launch_bounds__(256)
+void
+cute_norm_kernel_gradient(
+    i32 m, i32 n, i32 o, i32 k, i32 l,
+    i32 num_blocks_M,
+    f32 const *A, u64 ldA,                u64 batch_stride_a, // kernel_matrix   L,M,N     l,m,k
+    f32 const *B, u64 ldB,                u64 batch_stride_b, // data_N          L,N,D     l,k,n
+    f32 const *C, u64 ldC,                u64 batch_stride_c, // solution        L,N,C     l,k,o
+    f32 const *D, u64 ldD,                u64 batch_stride_d, // data_M          L,M,D     l,m,n
+    f32 *E,       u64 ldE_N, u64 ldE_O,   u64 batch_stride_e, // grad            L,M,D,C   l,m,n,o
+    f32 *P,                               u64 batch_stride_p
+) {
+    using namespace cute;
+    using T = f32;
+
+    auto M = u64(m);
+    auto N = u64(n);
+    auto O = u64(o);
+    auto K = u64(k);
+    auto L = u64(l);
+
+    auto prob_shape = make_shape(M,N,O,K,L);
+
+    auto dA = make_stride(Int<1>{}, ldA, batch_stride_a);           // (dM, dK) : M-major
+    auto dB = make_stride(ldB, Int<1>{}, batch_stride_b);           // (dN, dK) : K-major
+    auto dC = make_stride(ldC, Int<1>{}, batch_stride_c);           // (dO, dK) : K-major
+    auto dD = make_stride(Int<1>{}, ldD, batch_stride_d);           // (dM, dN) : M-major
+    auto dE = make_stride(Int<1>{}, ldE_N, ldE_O, batch_stride_e);  // (dM, dN, dO) : M-major
+    auto dP = make_stride(batch_stride_p);
+
+    auto bM = Int<128>{};
+    auto bN = Int<16>{};
+    auto bO = Int<16>{};
+    auto bK = Int<32>{};
+    auto cta_tiler = make_shape(bM, bN, bO, bK);
+    auto bP = Int<2>{};
+
+    auto thread_tiler = Layout<Shape<_32, _8, _1>>{}; // M, N, O
+
+    auto sA = make_layout(make_shape(bM, bK, bP)); // M-major
+    
+    auto sB_atom = make_layout(
+        make_shape(bN, bK),
+        make_stride(Int<1>{}, bN)
+    ); // (n,k) -> smem_idx; padded n-major
+    auto sB = tile_to_shape(sB_atom, make_shape(bN, bK, bP)); // N-major
+
+    auto sC_atom = make_layout(
+        make_shape(bO, bK),
+        make_stride(Int<1>{}, bO)
+    ); // (o,k) -> smem_idx; padded o-major
+    auto sC = tile_to_shape(sC_atom, make_shape(bO, bK, bP)); // O-major
+
+    auto sD = make_layout(make_shape(bM, bN)); // M-major
+    auto sE = make_layout(make_shape(bM, bN, bO)); // M-major
+
+    TiledCopy copyA = make_tiled_copy(
+        Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
+        Layout<Shape<_32,_8>>{}, // Thr layout 32x8 m-major
+        Layout<Shape< _1,_1>>{}  // Val layout  4x1 m-major
+    );
+
+    TiledCopy copyB = make_tiled_copy(
+        Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
+        Layout<Shape<_8,_32>, Stride<_32,_1>>{}, // Thr layout 8x32 k-major
+        Layout<Shape< _1,_1>>{} // Val layout  1x1
+    );
+
+    TiledCopy copyC = make_tiled_copy(
+        Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
+        Layout<Shape<_8,_32>, Stride<_32,_1>>{}, // Thr layout 8x32 k-major
+        Layout<Shape< _1,_1>>{} // Val layout  1x1 
+    );
+
+    kernel_cute_p_norm_kernel_gradient<
+        true, true,
+        norm_type
+    > (
+        prob_shape, cta_tiler, thread_tiler,
+        num_blocks_M,
+        A, dA, sA, copyA,
+        B, dB, sB, copyB,
+        C, dC, sC, copyC,
+        D, dD, sD,
+        E, dE, sE,
+        P, dP
+    );
 }
