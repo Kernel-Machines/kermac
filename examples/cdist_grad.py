@@ -9,6 +9,7 @@ def parse_args():
     parser.add_argument('-n','--N', type=int, default=768, help='Number of columns in data (default: 768)')
     parser.add_argument('-o','--O', type=int, default=16, help='Number of channels in coefficents (default: 16)')
     parser.add_argument('-k','--K', type=int, default=10000, help='Number of rows in data_x (default: 10000)')
+    parser.add_argument('-l','--L', type=int, default=2, help='Number of batches in each dimension (default: 2)')
     parser.add_argument('-p','--p', type=float, default=2.0, help='p-norm for distance computation (default: 2.0)')
     parser.add_argument('-d','--debug', default=False, action='store_true', help='Enable debug output (default: True)')
     parser.add_argument('--skip_torch_einsum', default=False, action='store_true', help='Skip running torch einsum. Helps avoid memory errors.')
@@ -17,7 +18,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    M, N, O, K, p = args.M, args.N, args.O, args.K, args.p
+    M, N, O, K, L, p = args.M, args.N, args.O, args.K, args.L, args.p
     debug = args.debug
 
     device = torch.device('cuda')
@@ -27,26 +28,27 @@ def main():
     size_D = N
     size_C = O
     size_N = K
+    size_L = L
 
     if debug: 
         print('\n(Kermac Debug) Warmup kermac.cdist_grad')
     kermac.cdist_grad(
-        torch.randn(10,100,device=device),
-        torch.randn(32,10,device=device),
-        torch.randn(16,10,device=device),
-        torch.randn(32,100,device=device),
+        torch.randn(2,10,100,device=device),
+        torch.randn(2,32,10,device=device),
+        torch.randn(2,16,10,device=device),
+        torch.randn(2,32,100,device=device),
         p = p,
         debug = debug
     )
 
     torch.cuda.synchronize()
 
-    tensor_A = torch.randn(size_N,size_M,device=device) # M-major # M-major 
-    tensor_B = torch.randn(size_D,size_N,device=device) # N-major # K-major
-    tensor_C = torch.randn(size_C,size_N,device=device) # N-major # K-major
-    tensor_D = torch.randn(size_D,size_M,device=device) # M-major # M-Major
+    tensor_A = torch.randn(size_L,size_N,size_M,device=device) # M-major # M-major 
+    tensor_B = torch.randn(size_L,size_D,size_N,device=device) # N-major # K-major
+    tensor_C = torch.randn(size_L,size_C,size_N,device=device) # N-major # K-major
+    tensor_D = torch.randn(size_L,size_D,size_M,device=device) # M-major # M-Major
     # result tensor of mine
-    tensor_E = torch.zeros(size_C,size_D,size_M,device=device) # M-major # M-major # (O,N,M)
+    tensor_E = torch.zeros(size_L,size_C,size_D,size_M,device=device) # M-major # M-major # (O,N,M)
 
     coefs =         tensor_C
     kernel_matrix = tensor_A
@@ -69,7 +71,7 @@ def main():
     )
     if debug:
         print('')
-    print(f'Running p-norm-gradient={p} with size ({K},{M}) by ({N},{K}) by ({O},{K}) by ({N},{M})')
+    print(f'Running p-norm-gradient={p} with size ({L},{K},{M}) by ({L},{N},{K}) by ({L},{O},{K}) by ({L},{N},{M}) = ({L},{O},{N},{M})')
     print(f"\tkermac.cdist_grad \t\t{timer.stop():.3f} ms")
 
     if not p == 2.0:
@@ -79,7 +81,7 @@ def main():
         exit()
     try:
         timer.start()
-        torch_out = torch.einsum('li,ij,jd->ljd', coefs, kernel_matrix, z.T) - torch.einsum('li,ij,id->ljd', coefs, kernel_matrix, x.T)
+        torch_out = torch.einsum('bli,bij,bjd->bljd', coefs, kernel_matrix, z.permute(0,2,1)) - torch.einsum('bli,bij,bid->bljd', coefs, kernel_matrix, x.permute(0,2,1))
         print(f"\ttorch-einsum-cdist_grad\t\t{timer.stop():.3f} ms")
     except Exception as e:
         print(f'Exception: {e}')
@@ -88,7 +90,7 @@ def main():
 
     if not args.skip_numeric_compare:
         try:
-            diff = kermac_out.permute(0,2,1) - torch_out
+            diff = kermac_out.permute(0,1,3,2) - torch_out
             squared_diff = diff ** 2
             mse = torch.mean(squared_diff)
             rmse = torch.sqrt(mse).item()
