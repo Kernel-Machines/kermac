@@ -44,24 +44,32 @@ def main():
     size_N = K
     size_L = L
 
+    # tensor_p = torch.full((1,), p, dtype=torch.float32, device=device)
+    tensor_p = torch.tensor([2.0, 2.0], dtype=torch.float32, device=device)
+
+    tensor_mini_A = torch.randn(2,10,100,device=device)
+    tensor_mini_B = torch.randn(2,32,10,device=device)
+    tensor_mini_C = torch.randn(2,16,10,device=device)
+    tensor_mini_D = torch.randn(2,32,100,device=device)
+
     print(f'Warmup {warmup_rounds} iterations of kermac.cdist_grad')
     for _ in range(warmup_rounds):
         kermac.cdist_grad(
-            torch.randn(2,10,100,device=device),
-            torch.randn(2,32,10,device=device),
-            torch.randn(2,16,10,device=device),
-            torch.randn(2,32,100,device=device),
-            p = p,
+            tensor_mini_A,
+            tensor_mini_B,
+            tensor_mini_C,
+            tensor_mini_D,
+            p = tensor_p,
             debug = debug
         )
     torch.cuda.synchronize()
     if not skip_torch:
         for _ in range(warmup_rounds):
             torch_cdist_grad(
-                torch.randn(2,16,10,device=device),
-                torch.randn(2,10,100,device=device),
-                torch.randn(2,32,10,device=device),
-                torch.randn(2,32,100,device=device),
+                tensor_mini_C,
+                tensor_mini_A,
+                tensor_mini_B,
+                tensor_mini_D,
             )
         torch.cuda.synchronize()
 
@@ -89,7 +97,7 @@ def main():
             tensor_C,
             tensor_D,
             out = tensor_E,
-            p = p,
+            p = tensor_p,
             debug = debug
         )
     if debug:

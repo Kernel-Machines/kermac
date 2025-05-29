@@ -3,6 +3,7 @@ from cuda.core.experimental import Device, LaunchConfig, launch
 import torch
 import numpy as np
 
+from typing import Union
 from .module_cache.module_cache import *
 from .common import *
 
@@ -12,7 +13,7 @@ def cdist_grad(
     c : torch.Tensor,           # [O,K]     # K-major # [C,N]   # coefs
     d : torch.Tensor,           # [N,M]     # M-major # [D,M]   # z
     out : torch.Tensor = None,  # [O,N,M]   # M-major # [C,D,M] # grad
-    p : float = 2.0,
+    p : Union[float, torch.Tensor] = 2.0,
     debug = False
 ):
     """
@@ -104,6 +105,7 @@ def cdist_grad(
     L_d, N_d, M_d = tensor_stats_d.shape
 
     L = 1
+    L = merge_batch_size_of_hyperparameter(L,p)
     L = merge_batch_size(L, L_a)
     L = merge_batch_size(L, L_b)
     L = merge_batch_size(L, L_c)
@@ -128,6 +130,14 @@ def cdist_grad(
     M = M_a
     N = N_b
     O = O_c
+
+    if isinstance(p, float):
+        p = torch.tensor(p, dtype=torch.float32, device=tensor_device)
+    else:
+        if p.dtype != torch.float32:
+            raise TypeError("`p` tensor must have dtype torch.float32")
+        if not p.is_cuda or p.device != tensor_device:
+            raise ValueError("`inner_p` tensor must be on the same CUDA device as inputs")
 
     shape_a = (K_a, M_a)
     shape_b = (N_b, K_b)
@@ -176,10 +186,14 @@ def cdist_grad(
     if tensor_device != pt_device:
         raise ValueError("cuda stream must be on the same device as the tensors: got {pt_device}, expected {tensor_device}")
 
-    if p == 1.0:
-        norm_type = 'L1'
-    elif p == 2.0:
-        norm_type = 'L2'
+    if p.numel() == 1:
+        p_value = p.item()
+        if p_value == 1.0:
+            norm_type = 'L1'
+        elif p_value == 2.0:
+            norm_type = 'L2'
+        else:
+            norm_type = 'P'
     else:
         norm_type = 'P'
         
@@ -189,7 +203,7 @@ def cdist_grad(
     if debug:
         print(f'(Kermac Debug) Launching kernel: {function_string}')
 
-    p = np.float32(p-1.0) # convert to float32
+    p_tensor = p-1.0
 
     bM = 128
     bN = 16
@@ -220,15 +234,17 @@ def cdist_grad(
     ld_e_O = np.uint64(result.stride(-3)) # outer-most/slowest-moving/left-most stride
     batch_stride_e = np.uint64(0 if L == 1 else result.stride(-4))
 
+    batch_stride_p = np.uint64(0 if p_tensor.numel() == 1 else 1)
+
     kernel_args = (
         M, N, O, K, L,
+        np.int32(num_blocks_M), # Need this to index num_blocks_L by division
         a.data_ptr(),       ld_a,                   batch_stride_a,
         b.data_ptr(),       ld_b,                   batch_stride_b,
         c.data_ptr(),       ld_c,                   batch_stride_c,
         d.data_ptr(),       ld_d,                   batch_stride_d,
         result.data_ptr(),  ld_e_N,     ld_e_O,     batch_stride_e,
-        np.int32(num_blocks_M), # Need this to index num_blocks_L by division
-        np.float32(p)
+        p_tensor.data_ptr(),                        batch_stride_p
     )
 
     launch(stream, config, kernel, *kernel_args)

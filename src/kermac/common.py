@@ -49,6 +49,24 @@ def merge_batch_size(L, this_L):
         raise ValueError("batch sizes don't match up")
     return max(L, this_L)
 
+def merge_batch_size_of_hyperparameter(L, x):
+    if x is None:
+        return L
+    elif isinstance(x, torch.Tensor):
+        if not x.is_contiguous():
+            raise ValueError("hyperparameter tensor needs to be contiguous")
+        if x.dim() != 0 and x.dim() != 1:
+            raise ValueError("hyperparameter tensor is neither 0 or 1 dimensional")
+        if x.dim() == 0:
+            return 1
+        if x.dim() == 1:
+            this_L = x.size(0)
+            return merge_batch_size(L, this_L)
+    elif isinstance(x, float):
+        return L
+    else:
+        raise ValueError("hyperparameter is wrong type")
+
 class TensorStats:
     def __init__(self, tensor: torch.Tensor):
         if tensor.dim() not in (2, 3):

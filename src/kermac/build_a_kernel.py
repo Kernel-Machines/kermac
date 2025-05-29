@@ -207,22 +207,6 @@ def run_kernel(
     if regularization is None:
         regularization = 0.0
 
-    def merge_batch_size_of_hyperparameter(L, x):
-        if x is None:
-            return L
-        elif isinstance(x, torch.Tensor):
-            if x.dim() != 0 and x.dim() != 1:
-                raise ValueError("hyperparameter tensor is neither 0 or 1 dimensional")
-            if x.dim() == 0:
-                return 1
-            if x.dim() == 1:
-                this_L = x.size(0)
-                return merge_batch_size(L, this_L)
-        elif isinstance(x, float):
-            return L
-        else:
-            raise ValueError("hyperparameter is wrong type")
-
     L = 1
     L = merge_batch_size_of_hyperparameter(L,p)
     L = merge_batch_size_of_hyperparameter(L,inner_p)

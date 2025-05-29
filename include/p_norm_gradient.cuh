@@ -29,6 +29,7 @@ template <
     class CStride, class CSmemLayout, class TiledCopyC,
     class DStride, class DSmemLayout,
     class EStride, class ESmemLayout,
+    class PStride,
     class T
 >
 __device__
@@ -36,13 +37,13 @@ __forceinline__
 void
 kernel_cute_p_norm_kernel_gradient(
     ProblemShape shape_MNOKL, CtaTiler cta_tiler, ThreadTiler thread_tiler,
+    int num_blocks_M,
     T const *A, AStride dA, ASmemLayout sA_layout, TiledCopyA copy_a,
     T const *B, BStride dB, BSmemLayout sB_layout, TiledCopyB copy_b,
     T const *C, CStride dC, CSmemLayout sC_layout, TiledCopyC copy_c,
     T const *D, DStride dD, DSmemLayout sD_layout,
     T       *E, EStride dE, ESmemLayout,
-    int num_blocks_M,
-    T p_power
+    T       *P, PStride dP
 ) {
     static_assert(norm_type == NormType::L1 || norm_type == NormType::L2 || norm_type == NormType::P);
 
@@ -84,17 +85,25 @@ kernel_cute_p_norm_kernel_gradient(
     CUTE_STATIC_ASSERT_V(congruent(select<0,1,4>(shape_MNOKL), dD));         // dD strides for shape MN
     CUTE_STATIC_ASSERT_V(congruent(select<0,1,2,4>(shape_MNOKL), dE));       // dE strides for shape MNO
     
-    auto bidx = blockIdx.x % num_blocks_M;
-    auto bidy = blockIdx.y;
-    auto bidz = blockIdx.z;
-    auto bidw = blockIdx.x / num_blocks_M;
-
     // Represent the full tensors
     Tensor mA = make_tensor(make_gmem_ptr(A), select<0,3,4>(shape_MNOKL), dA); // (M,K)
     Tensor mB = make_tensor(make_gmem_ptr(B), select<1,3,4>(shape_MNOKL), dB); // (N,K)
     Tensor mC = make_tensor(make_gmem_ptr(C), select<2,3,4>(shape_MNOKL), dC); // (O,K)
     Tensor mD = make_tensor(make_gmem_ptr(D), select<0,1,4>(shape_MNOKL), dD); // (M,N)
     Tensor mE = make_tensor(make_gmem_ptr(E), select<0,1,2,4>(shape_MNOKL), dE); // (M,N,O)
+
+    Tensor mP = make_tensor(make_gmem_ptr(P), select<4>(shape_MNOKL), dP);
+
+    auto bidx = blockIdx.x % num_blocks_M;
+    auto bidy = blockIdx.y;
+    auto bidz = blockIdx.z;
+    auto bidw = blockIdx.x / num_blocks_M;
+
+    T p_power_grad = T(0);
+
+    if constexpr (norm_type == NormType::P) {
+        p_power_grad = mP(bidw);
+    }
 
     auto cta_coord = make_coord(bidx, bidy, bidz, _); // (m,n,o,k)
     Tensor gA = local_tile(mA(_,_,bidw), cta_tiler, cta_coord, Step<_1,  X,  X, _1>{}); // (BLK_M,BLK_K,k)
@@ -402,7 +411,7 @@ kernel_cute_p_norm_kernel_gradient(
                         diff = diff;
                     } else {
                         diff = _abs(diff);
-                        diff = _pow(diff, p_power);
+                        diff = _pow(diff, p_power_grad);
                         diff = diff * sign;
                     }
                     diff = tErA(m,k_block) * diff;
