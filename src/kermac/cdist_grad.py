@@ -199,8 +199,9 @@ def cdist_grad(
     num_blocks_M = ceil_div(M, bM)
     num_blocks_N = ceil_div(N, bN)
     num_blocks_O = ceil_div(O, bO)
+    num_blocks_L = L
 
-    grid = (num_blocks_M, num_blocks_N, num_blocks_O)
+    grid = (num_blocks_L*num_blocks_M, num_blocks_N, num_blocks_O)
     config = LaunchConfig(grid=grid, block=block)
 
     ld_a = np.uint64(tensor_stats_a.leading_dimension_stride)
@@ -226,6 +227,7 @@ def cdist_grad(
         c.data_ptr(),       ld_c,                   batch_stride_c,
         d.data_ptr(),       ld_d,                   batch_stride_d,
         result.data_ptr(),  ld_e_N,     ld_e_O,     batch_stride_e,
+        np.int32(num_blocks_M), # Need this to index num_blocks_L by division
         np.float32(p)
     )
 

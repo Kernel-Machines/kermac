@@ -10,17 +10,17 @@ class TestCDistGrad(unittest.TestCase):
         self.N = 1000   # Number of dimension
         self.O = 16     # Number of classes
         self.K = 64     # Contraction dimension
-        self.L = 2      # Number of batches
+        self.L = 4      # Number of batches
         self.p_values = [2.0] # Can only test this case easily. 
         self.atol = 1e-4    # Absolute tolerance for numerical comparison
         self.rtol = 1e-5    # Relative tolerance for numerical comparison
         self.debug = False
 
-        self.a = torch.randn(self.K, self.M, device=self.device)
-        self.b = torch.randn(self.N, self.K, device=self.device)
-        self.c = torch.randn(self.O, self.K, device=self.device)
-        self.d = torch.randn(self.N, self.M, device=self.device)
-        self.e = torch.randn(self.O, self.N, self.M, device=self.device)
+        self.a = torch.randn(self.L, self.K, self.M, device=self.device)
+        self.b = torch.randn(self.L, self.N, self.K, device=self.device)
+        self.c = torch.randn(self.L, self.O, self.K, device=self.device)
+        self.d = torch.randn(self.L, self.N, self.M, device=self.device)
+        self.e = torch.randn(self.L, self.O, self.N, self.M, device=self.device)
 
     def _compare_outputs(self, kermac_out, torch_out):
         """Compare kermac.cdist and torch.cdist outputs."""
@@ -42,13 +42,13 @@ class TestCDistGrad(unittest.TestCase):
 
         coefs = self.c
         kernel_matrix = self.a
-        x = self.b
-        z = self.d
-        torch_left = torch.einsum('li,ij,jd->ljd', coefs, kernel_matrix, z.T)
-        torch_right = torch.einsum('li,ij,id->ljd', coefs, kernel_matrix, x.T)
+        x = self.b.permute(0,2,1)
+        z = self.d.permute(0,2,1)
+        torch_left = torch.einsum('bli,bij,bjd->bljd', coefs, kernel_matrix, z)
+        torch_right = torch.einsum('bli,bij,bid->bljd', coefs, kernel_matrix, x)
         torch_out = torch_left - torch_right
 
-        kermac_out = kermac_out.permute(0,2,1)
+        kermac_out = kermac_out.permute(0,1,3,2)
         # Compare outputs
         rmse, max_abs_error = self._compare_outputs(kermac_out, torch_out)
 
