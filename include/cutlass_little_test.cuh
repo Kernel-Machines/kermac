@@ -27,13 +27,14 @@ cutlass_little_test(
 
     auto sA_atom = make_layout(
         make_shape(bM,bK),
-        make_stride(Int<1>{},bM)
+        make_stride(Int<1>{},bM+Int<4>{})
     );
     auto sA_layout = tile_to_shape(sA_atom, make_shape(bM,bK));
 
     TiledCopy copy_a = make_tiled_copy(
         Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<T>, T>{},
-        Layout<Shape<_2,_8>, Stride<_8,_1>>{}, // Thr layout 8x32 k-major
+        // Layout<Shape<decltype(bM),decltype(bK)>, Stride<decltype(bK),_1>>{}, // Thr layout 8x32 k-major
+        make_layout(make_shape(bM,bK), make_stride(bK,Int<1>{})),
         Layout<Shape< _1,_1>>{} // Val layout  1x1 
     );
 
@@ -43,7 +44,7 @@ cutlass_little_test(
     Tensor gA = local_tile(mA, cta_tiler, cta_coord, Step<_1, _1>{});
 
     auto smem_layout = make_layout(
-        make_shape(Int<4>{},Int<8>{}),
+        make_shape(Int<4>{},Int<16>{}),
         make_stride(Int<1>{},Int<4>{})
     );
     alignas(16) __shared__ T smem_a[cosize_v<decltype(smem_layout)>];
@@ -63,10 +64,11 @@ cutlass_little_test(
     Tensor tAcA = thr_copy_a.partition_S(cA);
 
     CUTE_UNROLL
-    for (int i = 0; i < size(tApA); i++) {
-        auto m = get<0>(tAcA(i));
-        auto k = get<1>(tAcA(i));
-        tApA(i) = m < bM && k < bK;
+    for (int m = 0; m < size<0>(tApA); m++) {
+        CUTE_UNROLL
+        for (int k = 0; k < size<1>(tApA); k++) {
+            tApA(m,k) = get<0>(tAcA(0,m,k)) < bM && get<1>(tAcA(0,m,k)) < bK;
+        }
     }
     // Tensor tACA = thr_copy_a.partition_D(cA);
     // auto thread_tiler = Layout<Shape<_1>>{};
@@ -74,7 +76,7 @@ cutlass_little_test(
     // Tensor tEsA = local_partition(sA, thread_tiler, threadIdx.x, Step<_1>{});
     // Tensor tErA = make_fragment_like(tEsA);
 
-    if (thread(8)) {
+    if (thread(16)) {
         print("tAgA : "); print(tAgA); print("\n");
         print("tAsA : "); print(tAsA); print("\n");
         print("tApA : "); print(tApA); print("\n");
@@ -83,7 +85,7 @@ cutlass_little_test(
         print("tApA : "); print_tensor(tApA);
     }
     clear(sMem);
-    copy_if(copy_a, tApA, tAgA(_,_,_,1), tAsA(_,_,_));
+    copy_if(copy_a, tApA, tAgA(_,_,_,0), tAsA(_,_,_));
     // copy(copy_a, tAgA(_,_,_,0), tAsA(_,_,_));
 
     cp_async_fence();
