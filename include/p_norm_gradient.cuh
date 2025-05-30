@@ -53,7 +53,8 @@ kernel_cute_p_norm_kernel_gradient(
     CUTE_STATIC_ASSERT_V(rank(thread_tiler) == Int<3>{}); // (THR_M, THR_N, THR_O)
 
     CUTE_STATIC_ASSERT_V(size(copy_a) == size(thread_tiler)); // NumThreads
-    // CUTE_STATIC_ASSERT_V(size(copy_b) == size(thread_tiler)); // NumThreads
+    CUTE_STATIC_ASSERT_V(size(copy_b) == size(thread_tiler)); // NumThreads
+    // NOTE comment out this restriction
     // CUTE_STATIC_ASSERT_V(size(copy_c) == size(thread_tiler)); // NumThreads
 
     static_assert(is_static<ASmemLayout>::value);
@@ -242,7 +243,8 @@ kernel_cute_p_norm_kernel_gradient(
     }
     CUTE_UNROLL
     for (int o = 0; o < size<0>(tCpC); o++) {
-        tCpC(o,0) = get<0>(tCcC(0,o,0)) < o_max_coord;
+// NOTE added threadIdx.x check
+        tCpC(o,0) = get<0>(tCcC(0,o,0)) < o_max_coord && threadIdx.x < size(copy_c);
     }
     CUTE_UNROLL
     for (int i = 0; i < size(tEcD); i++) {
@@ -440,7 +442,8 @@ cute_norm_kernel_gradient(
 
     auto bM = Int<32>{};
     auto bN = Int<32>{};
-    auto bO = Int<32>{};
+// NOTE REDUCE 32 -> 16
+    auto bO = Int<16>{};
     auto bK = Int<8>{};
     auto cta_tiler = make_shape(bM, bN, bO, bK);
     auto bP = Int<2>{};
@@ -476,9 +479,10 @@ cute_norm_kernel_gradient(
         Layout<Shape< _1,_1>>{} // Val layout  1x1
     );
 
+// NOTE REDUCE 32 -> 16
     TiledCopy copyC = make_tiled_copy(
         Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
-        Layout<Shape<_32,_8>, Stride<_8,_1>>{}, // Thr layout 8x32 k-major
+        Layout<Shape<_16,_8>, Stride<_8,_1>>{}, // Thr layout 8x32 k-major
         Layout<Shape< _1,_1>>{} // Val layout  1x1 
     );
 

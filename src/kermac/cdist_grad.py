@@ -199,7 +199,8 @@ def cdist_grad(
 
     num_blocks_M = ceil_div(M, 32)
     num_blocks_N = ceil_div(N, 32)
-    num_blocks_O = ceil_div(O, 32)
+# NOTE reduce 32 -> 16
+    num_blocks_O = ceil_div(O, 16)
     num_blocks_L = L
 
     grid = (num_blocks_L*num_blocks_M, num_blocks_N, num_blocks_O)
