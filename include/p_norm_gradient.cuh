@@ -54,7 +54,7 @@ kernel_cute_p_norm_kernel_gradient(
 
     CUTE_STATIC_ASSERT_V(size(copy_a) == size(thread_tiler)); // NumThreads
     CUTE_STATIC_ASSERT_V(size(copy_b) == size(thread_tiler)); // NumThreads
-    CUTE_STATIC_ASSERT_V(size(copy_c) == size(thread_tiler)); // NumThreads
+    // CUTE_STATIC_ASSERT_V(size(copy_c) == size(thread_tiler)); // NumThreads
 
     static_assert(is_static<ASmemLayout>::value);
     static_assert(is_static<BSmemLayout>::value);
@@ -220,24 +220,22 @@ kernel_cute_p_norm_kernel_gradient(
         make_shape(size<0>(tEcD), size<1>(tEcD))
     );
 
-    if constexpr (predicate_reads) {
-        // Generate the in-bounds/out-of-bounds coordinates for each tensor as a bool predicate
-        CUTE_UNROLL
-        for (int m = 0; m < size<0>(tApA); m++) {
-            tApA(m,0) = get<0>(tAcA(0,m,0)) < m_max_coord;
-        }
-        CUTE_UNROLL
-        for (int n = 0; n < size<0>(tBpB); n++) {
-            tBpB(n,0) = get<0>(tBcB(0,n,0)) < n_max_coord;
-        }
-        CUTE_UNROLL
-        for (int o = 0; o < size<0>(tCpC); o++) {
-            tCpC(o,0) = get<0>(tCcC(0,o,0)) < o_max_coord;
-        }
-        CUTE_UNROLL
-        for (int i = 0; i < size(tEcD); i++) {
-            tEpD(i) = elem_less(tEcD(i), make_coord(m_max_coord,n_max_coord));
-        }
+    // Generate the in-bounds/out-of-bounds coordinates for each tensor as a bool predicate
+    CUTE_UNROLL
+    for (int m = 0; m < size<0>(tApA); m++) {
+        tApA(m,0) = get<0>(tAcA(0,m,0)) < m_max_coord;
+    }
+    CUTE_UNROLL
+    for (int n = 0; n < size<0>(tBpB); n++) {
+        tBpB(n,0) = get<0>(tBcB(0,n,0)) < n_max_coord;
+    }
+    CUTE_UNROLL
+    for (int o = 0; o < size<0>(tCpC); o++) {
+        tCpC(o,0) = get<0>(tCcC(0,o,0)) < o_max_coord && threadIdx.x < size(copy_c);
+    }
+    CUTE_UNROLL
+    for (int i = 0; i < size(tEcD); i++) {
+        tEpD(i) = elem_less(tEcD(i), make_coord(m_max_coord,n_max_coord));
     }
 
     // Print all tensor shapes/data here before anything functionally happens such as copies
@@ -248,10 +246,53 @@ kernel_cute_p_norm_kernel_gradient(
         clear(tBsB);
         clear(tCsC);
 
-        // Start async loads for 0th k-tile, where we take care of the k-residue
-        // We already shifted the global memory coordinate over to account for the k-residue
-        {
-            constexpr int k_pipe = 0;
+    // Start async loads for 0th k-tile, where we take care of the k-residue
+    // We already shifted the global memory coordinate over to account for the k-residue
+    {
+        constexpr int k_pipe = 0;
+
+        Tensor tAgAk = tAgA(_,_,_,k_tile_next);
+        CUTE_UNROLL
+        for (int k = 0; k < size<2>(tAsA); ++k) {
+            if (get<1>(tAcA(0,0,k)) >= -k_residue) { // blk_k coord < residue_k (gA shifted)
+                copy_if(copy_a, tApA(_,k), tAgAk(_,_,k), tAsA(_,_,k,k_pipe));
+            }
+        }
+        Tensor tBgBk = tBgB(_,_,_,k_tile_next);
+        CUTE_UNROLL
+        for (int k = 0; k < size<2>(tBsB); ++k) {
+            if (get<1>(tBcB(0,0,k)) >= -k_residue) { // blk_k coord < residue_k (gB shifted)
+                copy_if(copy_b, tBpB(_,k), tBgBk(_,_,k), tBsB(_,_,k,k_pipe));
+            }
+        }
+        Tensor tCgCk = tCgC(_,_,_,k_tile_next);
+        CUTE_UNROLL
+        for (int k = 0; k < size<2>(tCsC); ++k) {
+            if (get<1>(tCcC(0,0,k)) >= -k_residue) { // blk_k coord < residue_k (gC shifted)
+                copy_if(copy_c, tCpC(_,k), tCgCk(_,_,k), tCsC(_,_,k,k_pipe));
+            }
+        }
+        cp_async_fence();
+        --k_tile_count;
+        if (k_tile_count > 0) { ++k_tile_next; }
+    }
+
+    // Start async loads for 1st k-tile onwards, no k-residue handling needed
+    // Do this for all but the last pipe. Each mainloop iter will schedule a pipeline copy.
+    CUTE_UNROLL
+    for (int k_pipe = 1; k_pipe < K_PIPE_MAX-1; ++k_pipe) {
+        if (k_tile_count <= 0) {
+            clear(tApA);
+            clear(tBpB);
+            clear(tCpC);
+        }
+        copy_if(copy_a, tApA, tAgA(_,_,_,k_tile_next), tAsA(_,_,_,k_pipe));
+        copy_if(copy_b, tBpB, tBgB(_,_,_,k_tile_next), tBsB(_,_,_,k_pipe));
+        copy_if(copy_c, tCpC, tCgC(_,_,_,k_tile_next), tCsC(_,_,_,k_pipe));
+        cp_async_fence();
+        --k_tile_count;
+        if (k_tile_count > 0) { ++k_tile_next; }
+    }
     
             Tensor tAgAk = tAgA(_,_,_,k_tile_next);
             CUTLASS_PRAGMA_UNROLL
@@ -410,17 +451,102 @@ kernel_cute_p_norm_kernel_gradient(
     }
 
     // Write accumulators
-    if constexpr (predicate_writes) {
-        CUTE_UNROLL
-        for (int i = 0; i < size(tErE); i++) {
-            if (elem_less(tEcE(i), make_coord(m_max_coord,n_max_coord,o_max_coord))) {
-                tEgE(i) = tErE(i);
-            }
-        }
-    } else {
-        CUTE_UNROLL
-        for (int i = 0; i < size(tErE); i++) {
+    CUTE_UNROLL
+    for (int i = 0; i < size(tErE); i++) {
+        if (elem_less(tEcE(i), make_coord(m_max_coord,n_max_coord,o_max_coord))) {
             tEgE(i) = tErE(i);
         }
     }
+}
+
+template <
+    NormType norm_type
+>
+__global__
+__launch_bounds__(256)
+void
+cute_norm_kernel_gradient(
+    i32 m, i32 n, i32 o, i32 k, i32 l,
+    i32 num_blocks_M,
+    f32 const *A, u64 ldA,                u64 batch_stride_a, // kernel_matrix   L,M,N     l,m,k
+    f32 const *B, u64 ldB,                u64 batch_stride_b, // data_N          L,N,D     l,k,n
+    f32 const *C, u64 ldC,                u64 batch_stride_c, // solution        L,N,C     l,k,o
+    f32 const *D, u64 ldD,                u64 batch_stride_d, // data_M          L,M,D     l,m,n
+    f32 *E,       u64 ldE_N, u64 ldE_O,   u64 batch_stride_e, // grad            L,M,D,C   l,m,n,o
+    f32 *P,                               u64 batch_stride_p
+) {
+    using namespace cute;
+    using T = f32;
+
+    auto M = u64(m);
+    auto N = u64(n);
+    auto O = u64(o);
+    auto K = u64(k);
+    auto L = u64(l);
+
+    auto prob_shape = make_shape(M,N,O,K,L);
+
+    auto dA = make_stride(Int<1>{}, ldA, batch_stride_a);           // (dM, dK) : M-major
+    auto dB = make_stride(ldB, Int<1>{}, batch_stride_b);           // (dN, dK) : K-major
+    auto dC = make_stride(ldC, Int<1>{}, batch_stride_c);           // (dO, dK) : K-major
+    auto dD = make_stride(Int<1>{}, ldD, batch_stride_d);           // (dM, dN) : M-major
+    auto dE = make_stride(Int<1>{}, ldE_N, ldE_O, batch_stride_e);  // (dM, dN, dO) : M-major
+    auto dP = make_stride(batch_stride_p);
+
+    auto bM = Int<32>{};
+    auto bN = Int<32>{};
+    auto bO = Int<32>{};
+    auto bK = Int<8>{};
+    auto cta_tiler = make_shape(bM, bN, bO, bK);
+    auto bP = Int<2>{};
+
+    auto thread_tiler = Layout<Shape<_16, _16, _1>>{}; // M, N, O
+
+    auto sA = make_layout(make_shape(bM, bK, bP)); // M-major
+    
+    auto sB_atom = make_layout(
+        make_shape(bN, bK),
+        make_stride(Int<1>{}, bN+Int<4>{})
+    ); // (n,k) -> smem_idx; padded n-major
+    auto sB = tile_to_shape(sB_atom, make_shape(bN, bK, bP)); // N-major
+
+    auto sC_atom = make_layout(
+        make_shape(bO, bK),
+        make_stride(Int<1>{}, bO+Int<4>{})
+    ); // (o,k) -> smem_idx; padded o-major
+    auto sC = tile_to_shape(sC_atom, make_shape(bO, bK, bP)); // O-major
+
+    auto sD = make_layout(make_shape(bM, bN)); // M-major
+    auto sE = make_layout(make_shape(bM, bN, bO)); // M-major
+
+    TiledCopy copyA = make_tiled_copy(
+        Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
+        Layout<Shape<_32,_8>>{}, // Thr layout 32x8 m-major
+        Layout<Shape< _1,_1>>{}  // Val layout  4x1 m-major
+    );
+
+    TiledCopy copyB = make_tiled_copy(
+        Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
+        Layout<Shape<_32,_8>, Stride<_8,_1>>{}, // Thr layout 8x32 k-major
+        Layout<Shape< _1,_1>>{} // Val layout  1x1
+    );
+
+    TiledCopy copyC = make_tiled_copy(
+        Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
+        Layout<Shape<_32,_8>, Stride<_8,_1>>{}, // Thr layout 8x32 k-major
+        Layout<Shape< _1,_1>>{} // Val layout  1x1 
+    );
+
+    kernel_cute_p_norm_kernel_gradient<
+        norm_type
+    > (
+        prob_shape, cta_tiler, thread_tiler,
+        num_blocks_M,
+        A, dA, sA, copyA,
+        B, dB, sB, copyB,
+        C, dC, sC, copyC,
+        D, dD, sD,
+        E, dE, sE,
+        P, dP
+    );
 }
