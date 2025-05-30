@@ -20,8 +20,6 @@ struct SharedStorageNormGradient
 
 /// TODO: Need to make UniversalCopy smem to rmem available for different cta sizes
 template <
-    bool predicate_reads,
-    bool predicate_writes,
     NormType norm_type,
     class ProblemShape, class CtaTiler, class ThreadTiler,
     class AStride, class ASmemLayout, class TiledCopyA,
@@ -126,13 +124,11 @@ kernel_cute_p_norm_kernel_gradient(
         k_tile_count = size<3>(tAgA);
     }
 
-    if constexpr (predicate_reads) {
-        // Shift tensor so residue_k is at origin (Can't read any k_coord < residue_k)
-        // This aligns the tensor with BLK_K for all but the 0th k_tile
-        gA = cute::domain_offset(make_coord(0, k_residue, 0), gA);
-        gB = cute::domain_offset(make_coord(0, k_residue, 0), gB);
-        gC = cute::domain_offset(make_coord(0, k_residue, 0), gC);
-    }
+    // Shift tensor so residue_k is at origin (Can't read any k_coord < residue_k)
+    // This aligns the tensor with BLK_K for all but the 0th k_tile
+    gA = cute::domain_offset(make_coord(0, k_residue, 0), gA);
+    gB = cute::domain_offset(make_coord(0, k_residue, 0), gB);
+    gC = cute::domain_offset(make_coord(0, k_residue, 0), gC);
     
 #if 1
     alignas(16) __shared__ T smem_a[cosize_v<ASmemLayout>];
@@ -235,100 +231,80 @@ kernel_cute_p_norm_kernel_gradient(
         make_shape(size<0>(tEcD), size<1>(tEcD))
     );
 
-    if constexpr (predicate_reads) {
-        // Generate the in-bounds/out-of-bounds coordinates for each tensor as a bool predicate
-        CUTE_UNROLL
-        for (int m = 0; m < size<0>(tApA); m++) {
-            tApA(m,0) = get<0>(tAcA(0,m,0)) < m_max_coord;
-        }
-        CUTE_UNROLL
-        for (int n = 0; n < size<0>(tBpB); n++) {
-            tBpB(n,0) = get<0>(tBcB(0,n,0)) < n_max_coord;
-        }
-        CUTE_UNROLL
-        for (int o = 0; o < size<0>(tCpC); o++) {
-            tCpC(o,0) = get<0>(tCcC(0,o,0)) < o_max_coord;
-        }
-        CUTE_UNROLL
-        for (int i = 0; i < size(tEcD); i++) {
-            tEpD(i) = elem_less(tEcD(i), make_coord(m_max_coord,n_max_coord));
-        }
+    // Generate the in-bounds/out-of-bounds coordinates for each tensor as a bool predicate
+    CUTE_UNROLL
+    for (int m = 0; m < size<0>(tApA); m++) {
+        tApA(m,0) = get<0>(tAcA(0,m,0)) < m_max_coord;
+    }
+    CUTE_UNROLL
+    for (int n = 0; n < size<0>(tBpB); n++) {
+        tBpB(n,0) = get<0>(tBcB(0,n,0)) < n_max_coord;
+    }
+    CUTE_UNROLL
+    for (int o = 0; o < size<0>(tCpC); o++) {
+        tCpC(o,0) = get<0>(tCcC(0,o,0)) < o_max_coord;
+    }
+    CUTE_UNROLL
+    for (int i = 0; i < size(tEcD); i++) {
+        tEpD(i) = elem_less(tEcD(i), make_coord(m_max_coord,n_max_coord));
     }
 
     // Print all tensor shapes/data here before anything functionally happens such as copies
 
-    if constexpr (predicate_reads) {
-        // Clear the smem tiles to account for predicated off loads 
-        clear(tAsA);
-        clear(tBsB);
-        clear(tCsC);
+    // Clear the smem tiles to account for predicated off loads 
+    clear(tAsA);
+    clear(tBsB);
+    clear(tCsC);
 
-        // Start async loads for 0th k-tile, where we take care of the k-residue
-        // We already shifted the global memory coordinate over to account for the k-residue
-        {
-            constexpr int k_pipe = 0;
-    
-            Tensor tAgAk = tAgA(_,_,_,k_tile_next);
-            CUTLASS_PRAGMA_UNROLL
-            for (int k = 0; k < size<2>(tAsA); ++k) {
-                if (get<1>(tAcA(0,0,k)) >= -k_residue) { // blk_k coord < residue_k (gA shifted)
-                    copy_if(copy_a, tApA(_,k), tAgAk(_,_,k), tAsA(_,_,k,k_pipe));
-                }
-            }
-            Tensor tBgBk = tBgB(_,_,_,k_tile_next);
-            for (int k = 0; k < size<2>(tBsB); ++k) {
-                if (get<1>(tBcB(0,0,k)) >= -k_residue) { // blk_k coord < residue_k (gB shifted)
-                    if (threadIdx.x < size(copy_b)) copy_if(copy_b, tBpB(_,k), tBgBk(_,_,k), tBsB(_,_,k,k_pipe));
-                }
-            }
-            Tensor tCgCk = tCgC(_,_,_,k_tile_next);
-            for (int k = 0; k < size<2>(tCsC); ++k) {
-                if (get<1>(tCcC(0,0,k)) >= -k_residue) { // blk_k coord < residue_k (gC shifted)
-                    if (threadIdx.x < size(copy_c)) copy_if(copy_c, tCpC(_,k), tCgCk(_,_,k), tCsC(_,_,k,k_pipe));
-                }
-            }
-            cp_async_fence();
-            --k_tile_count;
-            if (k_tile_count > 0) { ++k_tile_next; }
-        }
+    // Start async loads for 0th k-tile, where we take care of the k-residue
+    // We already shifted the global memory coordinate over to account for the k-residue
+    {
+        constexpr int k_pipe = 0;
 
-        // Start async loads for 1st k-tile onwards, no k-residue handling needed
-        // Do this for all but the last pipe. Each mainloop iter will schedule a pipeline copy.
-        CUTE_UNROLL
-        for (int k_pipe = 1; k_pipe < K_PIPE_MAX-1; ++k_pipe) {
-            if (k_tile_count <= 0) {
-                clear(tApA);
-                clear(tBpB);
-                clear(tCpC);
+        Tensor tAgAk = tAgA(_,_,_,k_tile_next);
+        CUTLASS_PRAGMA_UNROLL
+        for (int k = 0; k < size<2>(tAsA); ++k) {
+            if (get<1>(tAcA(0,0,k)) >= -k_residue) { // blk_k coord < residue_k (gA shifted)
+                copy_if(copy_a, tApA(_,k), tAgAk(_,_,k), tAsA(_,_,k,k_pipe));
             }
-            copy_if(copy_a, tApA, tAgA(_,_,_,k_tile_next), tAsA(_,_,_,k_pipe));
-            if (threadIdx.x < size(copy_b)) copy_if(copy_b, tBpB, tBgB(_,_,_,k_tile_next), tBsB(_,_,_,k_pipe));
-            if (threadIdx.x < size(copy_c)) copy_if(copy_c, tCpC, tCgC(_,_,_,k_tile_next), tCsC(_,_,_,k_pipe));
-            cp_async_fence();
-            --k_tile_count;
-            if (k_tile_count > 0) { ++k_tile_next; }
         }
-        
-        // Copy D direct gmem to rmem. It stays static for whole mainloop.
-        // The bigger this is the more work it generates to excuse gmem latency.
-        copy_if(tEpD, tEgD, tErD);
-    } else { // No predicated reads
-        // Start async loads for 0th k-tile onwards, no k-residue handling needed
-        // Do this for all but the last pipe. Each mainloop iter will schedule a copy.
-        CUTE_UNROLL
-        for (int k_pipe = 0; k_pipe < K_PIPE_MAX-1; ++k_pipe) {
-            copy(copy_a, tAgA(_,_,_,k_tile_next), tAsA(_,_,_,k_pipe));
-            if (threadIdx.x < size(copy_b)) copy(copy_b, tBgB(_,_,_,k_tile_next), tBsB(_,_,_,k_pipe));
-            if (threadIdx.x < size(copy_c)) copy(copy_c, tCgC(_,_,_,k_tile_next), tCsC(_,_,_,k_pipe));
-            cp_async_fence();
-            --k_tile_count;
-            if (k_tile_count > 0) { ++k_tile_next; }
+        Tensor tBgBk = tBgB(_,_,_,k_tile_next);
+        for (int k = 0; k < size<2>(tBsB); ++k) {
+            if (get<1>(tBcB(0,0,k)) >= -k_residue) { // blk_k coord < residue_k (gB shifted)
+                copy_if(copy_b, tBpB(_,k), tBgBk(_,_,k), tBsB(_,_,k,k_pipe));
+            }
         }
-
-        // Copy D direct gmem to rmem. It stays static for whole mainloop.
-        // The bigger this is the more work it generates to excuse gmem latency.
-        copy(tEgD, tErD);
+        Tensor tCgCk = tCgC(_,_,_,k_tile_next);
+        for (int k = 0; k < size<2>(tCsC); ++k) {
+            if (get<1>(tCcC(0,0,k)) >= -k_residue) { // blk_k coord < residue_k (gC shifted)
+                copy_if(copy_c, tCpC(_,k), tCgCk(_,_,k), tCsC(_,_,k,k_pipe));
+            }
+        }
+        cp_async_fence();
+        --k_tile_count;
+        if (k_tile_count > 0) { ++k_tile_next; }
     }
+
+    // Start async loads for 1st k-tile onwards, no k-residue handling needed
+    // Do this for all but the last pipe. Each mainloop iter will schedule a pipeline copy.
+    CUTE_UNROLL
+    for (int k_pipe = 1; k_pipe < K_PIPE_MAX-1; ++k_pipe) {
+        if (k_tile_count <= 0) {
+            clear(tApA);
+            clear(tBpB);
+            clear(tCpC);
+        }
+        copy_if(copy_a, tApA, tAgA(_,_,_,k_tile_next), tAsA(_,_,_,k_pipe));
+        copy_if(copy_b, tBpB, tBgB(_,_,_,k_tile_next), tBsB(_,_,_,k_pipe));
+        copy_if(copy_c, tCpC, tCgC(_,_,_,k_tile_next), tCsC(_,_,_,k_pipe));
+        cp_async_fence();
+        --k_tile_count;
+        if (k_tile_count > 0) { ++k_tile_next; }
+    }
+    
+    // Copy D direct gmem to rmem. It stays static for whole mainloop.
+    // The bigger this is the more work it generates to excuse gmem latency.
+    copy_if(tEpD, tEgD, tErD);
 
     // Clear accumulators
     clear(tErE);
@@ -368,21 +344,16 @@ kernel_cute_p_norm_kernel_gradient(
             copy(tEsC_p(_,k_block_next), tErC(_,k_block_next));
             // Copy gmem to smem before computing gemm on each k-pipe
             if (k_block == 0) {
-                if constexpr (predicate_reads) {
-                    // Set all predicates to false if we are going to overshoot bounds
-                    if (k_tile_count <= 0) {
-                        clear(tApA);
-                        clear(tBpB);
-                        clear(tCpC);
-                    }
-                    copy_if(copy_a, tApA, tAgA(_,_,_,k_tile_next), tAsA(_,_,_,smem_pipe_write));
-                    if (threadIdx.x < size(copy_b)) copy_if(copy_b, tBpB, tBgB(_,_,_,k_tile_next), tBsB(_,_,_,smem_pipe_write));
-                    if (threadIdx.x < size(copy_c)) copy_if(copy_c, tCpC, tCgC(_,_,_,k_tile_next), tCsC(_,_,_,smem_pipe_write));
-                } else { // No predicated reads
-                    copy(copy_a, tAgA(_,_,_,k_tile_next), tAsA(_,_,_,smem_pipe_write));
-                    copy(copy_b, tBgB(_,_,_,k_tile_next), tBsB(_,_,_,smem_pipe_write));
-                    copy(copy_c, tCgC(_,_,_,k_tile_next), tCsC(_,_,_,smem_pipe_write));
+                // Set all predicates to false if we are going to overshoot bounds
+                if (k_tile_count <= 0) {
+                    clear(tApA);
+                    clear(tBpB);
+                    clear(tCpC);
                 }
+                copy_if(copy_a, tApA, tAgA(_,_,_,k_tile_next), tAsA(_,_,_,smem_pipe_write));
+                copy_if(copy_b, tBpB, tBgB(_,_,_,k_tile_next), tBsB(_,_,_,smem_pipe_write));
+                copy_if(copy_c, tCpC, tCgC(_,_,_,k_tile_next), tCsC(_,_,_,smem_pipe_write));
+                
                 cp_async_fence();
 
                 // Advance the gmem tile
@@ -425,16 +396,9 @@ kernel_cute_p_norm_kernel_gradient(
     }
 
     // Write accumulators
-    if constexpr (predicate_writes) {
-        CUTE_UNROLL
-        for (int i = 0; i < size(tErE); i++) {
-            if (elem_less(tEcE(i), make_coord(m_max_coord,n_max_coord,o_max_coord))) {
-                tEgE(i) = tErE(i);
-            }
-        }
-    } else {
-        CUTE_UNROLL
-        for (int i = 0; i < size(tErE); i++) {
+    CUTE_UNROLL
+    for (int i = 0; i < size(tErE); i++) {
+        if (elem_less(tEcE(i), make_coord(m_max_coord,n_max_coord,o_max_coord))) {
             tEgE(i) = tErE(i);
         }
     }
@@ -474,9 +438,9 @@ cute_norm_kernel_gradient(
     auto dE = make_stride(Int<1>{}, ldE_N, ldE_O, batch_stride_e);  // (dM, dN, dO) : M-major
     auto dP = make_stride(batch_stride_p);
 
-    auto bM = Int<128>{};
-    auto bN = Int<16>{};
-    auto bO = Int<16>{};
+    auto bM = Int<32>{};
+    auto bN = Int<32>{};
+    auto bO = Int<32>{};
     auto bK = Int<8>{};
     auto cta_tiler = make_shape(bM, bN, bO, bK);
     auto bP = Int<2>{};
@@ -508,18 +472,17 @@ cute_norm_kernel_gradient(
 
     TiledCopy copyB = make_tiled_copy(
         Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
-        Layout<Shape<_16,_8>, Stride<_8,_1>>{}, // Thr layout 8x32 k-major
+        Layout<Shape<_32,_8>, Stride<_8,_1>>{}, // Thr layout 8x32 k-major
         Layout<Shape< _1,_1>>{} // Val layout  1x1
     );
 
     TiledCopy copyC = make_tiled_copy(
         Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
-        Layout<Shape<_16,_8>, Stride<_8,_1>>{}, // Thr layout 8x32 k-major
+        Layout<Shape<_32,_8>, Stride<_8,_1>>{}, // Thr layout 8x32 k-major
         Layout<Shape< _1,_1>>{} // Val layout  1x1 
     );
 
     kernel_cute_p_norm_kernel_gradient<
-        true, true,
         norm_type
     > (
         prob_shape, cta_tiler, thread_tiler,
