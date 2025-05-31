@@ -28,7 +28,7 @@ kernel_cute_scaled_gemm(
     CUTE_STATIC_ASSERT_V(rank(thread_tiler) == Int<3>{}); // (THR_M, THR_N, THR_O)
 
     CUTE_STATIC_ASSERT_V(size(copy_a) == size(thread_tiler)); // NumThreads
-    CUTE_STATIC_ASSERT_V(size(copy_b) == size(thread_tiler)); // NumThreads
+    // CUTE_STATIC_ASSERT_V(size(copy_b) == size(thread_tiler)); // NumThreads
     // CUTE_STATIC_ASSERT_V(size(copy_c) == size(thread_tiler)); // NumThreads
 
     static_assert(is_static<ASmemLayout>::value);
@@ -90,9 +90,9 @@ kernel_cute_scaled_gemm(
     gB = cute::domain_offset(make_coord(0, k_residue, 0), gB);
     gC = cute::domain_offset(make_coord(0, k_residue, 0), gC);
 
-    alignas(16) __shared__ T smem_a[cosize_v<ASmemLayout>];
-    alignas(16) __shared__ T smem_b[cosize_v<BSmemLayout>];
-    alignas(16) __shared__ T smem_c[cosize_v<CSmemLayout>];
+    __shared__ T smem_a[cosize_v<ASmemLayout>];
+    __shared__ T smem_b[cosize_v<BSmemLayout>];
+    __shared__ T smem_c[cosize_v<CSmemLayout>];
     Tensor sA = make_tensor(make_smem_ptr(smem_a), sA_layout);   // (BLK_M,BLK_K,PIPE)
     Tensor sB = make_tensor(make_smem_ptr(smem_b), sB_layout);   // (BLK_N,BLK_K,PIPE)
     Tensor sC = make_tensor(make_smem_ptr(smem_c), sC_layout);   // (BLK_N,BLK_K,PIPE)
@@ -181,7 +181,7 @@ kernel_cute_scaled_gemm(
     }
     CUTE_UNROLL
     for (int n = 0; n < size<0>(tBpB); n++) {
-        tBpB(n,0) = get<0>(tBcB(0,n,0)) < n_max_coord;
+        tBpB(n,0) = get<0>(tBcB(0,n,0)) < n_max_coord && threadIdx.x < size(copy_b);
     }
     CUTE_UNROLL
     for (int o = 0; o < size<0>(tCpC); o++) {
@@ -222,6 +222,7 @@ kernel_cute_scaled_gemm(
             }
         }
         cp_async_fence();
+        __syncthreads();
         --k_tile_count;
         if (k_tile_count > 0) { ++k_tile_next; }
     }
@@ -239,6 +240,7 @@ kernel_cute_scaled_gemm(
         copy_if(copy_b, tBpB, tBgB(_,_,_,k_tile_next), tBsB(_,_,_,k_pipe));
         copy_if(copy_c, tCpC, tCgC(_,_,_,k_tile_next), tCsC(_,_,_,k_pipe));
         cp_async_fence();
+        __syncthreads();
         --k_tile_count;
         if (k_tile_count > 0) { ++k_tile_next; }
     }
@@ -292,6 +294,7 @@ kernel_cute_scaled_gemm(
                 copy_if(copy_c, tCpC, tCgC(_,_,_,k_tile_next), tCsC(_,_,_,smem_pipe_write));
 
                 cp_async_fence();
+                __syncthreads();
 
                 // Advance the gmem tile
                 --k_tile_count;
@@ -326,7 +329,9 @@ kernel_cute_scaled_gemm(
 }
 
 template<
-    int bo_size
+    int cta_m,
+    int cta_n,
+    int cta_o
 >
 __global__
 __launch_bounds__(256)
@@ -338,7 +343,9 @@ cute_scaled_gemm(
     float const *C, size_t ldC,
     float       *D, size_t ldD_N, size_t ldD_O
 ) {
-    static_assert(bo_size == 1 || bo_size == 2 || bo_size == 16 || bo_size == 32);
+    static_assert(cta_m == 32 || cta_m == 64 || cta_m == 128);
+    static_assert(cta_n == 16 || cta_n == 32 || cta_n == 64 || cta_n == 128);
+    static_assert(cta_o == 1 || cta_o == 2 || cta_o == 4 || cta_o == 8 || cta_o == 16 || cta_o == 32);
 
     using namespace cute;
     using T = float;
@@ -348,9 +355,9 @@ cute_scaled_gemm(
     auto O = size_t(o);
     auto K = size_t(k);
 
-    auto bM = Int<32>{};
-    auto bN = Int<32>{};
-    auto bO = Int<bo_size>{};
+    auto bM = Int<cta_m>{};
+    auto bN = Int<cta_n>{};
+    auto bO = Int<cta_o>{};
     auto bK = Int<8>{};
     auto cta_tiler = make_shape(bM, bN, bO, bK);
     auto bP = Int<3>{};
@@ -374,14 +381,17 @@ cute_scaled_gemm(
     auto sB = tile_to_shape(sB_atom, make_shape(bN, bK, bP));
 
     auto o_stride = [bO,bK] {
-        if constexpr(bo_size == 32 || bo_size == 16) {
+        if constexpr(cta_o == 32 || cta_o == 16) {
             return make_stride(Int<1>{}, bO+Int<4>{});
-        } else if constexpr (bo_size == 8) { // ?
-        } else if constexpr (bo_size == 4) { // ?
-        } else if constexpr (bo_size == 2 || bo_size == 1) {
+        } else if constexpr (cta_o == 8) { // ?
+            return make_stride(Int<8>{}, Int<1>{});
+        } else if constexpr (cta_o == 4) { // ?
+            return make_stride(Int<8>{}, Int<1>{});
+        } else if constexpr (cta_o == 2 || cta_o == 1) {
             return make_stride(Int<8>{}, Int<1>{});
         }
     }();
+    
 
     auto sC_atom = make_layout(
         make_shape(bO, bK), o_stride
@@ -396,14 +406,23 @@ cute_scaled_gemm(
             Layout<Shape<_32,_8>, Stride<_8,_1>>{},
             Layout<Shape<_1,_1>>{}
         );
-    auto copyB = 
-        make_tiled_copy(
-            Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<T>, T>{},
-            Layout<Shape<_32,_8>, Stride<_8,_1>>{},
-            Layout<Shape<_1,_1>>{}
-        );
+    auto copyB = [] {
+        if constexpr (cta_n >= 32) {
+            return make_tiled_copy(
+                Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<T>, T>{},
+                Layout<Shape<_32,_8>, Stride<_8,_1>>{},
+                Layout<Shape<_1,_1>>{}
+            );
+        } else {
+            return make_tiled_copy(
+                Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<T>, T>{},
+                Layout<Shape<decltype(bN),_8>, Stride<_8,_1>>{},
+                Layout<Shape<_1,_1>>{}
+            );
+        }
+    }();
 
-    auto copyC = 
+    auto copyC =
         make_tiled_copy(
             Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<T>, T>{},
             Layout<Shape<decltype(bO),_8>, Stride<_8,_1>>{},
@@ -411,6 +430,14 @@ cute_scaled_gemm(
         );
 
     auto thread_tiler = Layout<Shape<_16,_16,_1>>{}; // M, N, O
+
+    // if (thread0()) {
+    //     print(cta_m); print("\n");
+    //     print(cta_n); print("\n");
+    //     print(cta_o); print("\n");
+    //     print(size(copyB)); print("\n");
+    //     print(size(copyC)); print("\n");
+    // }
 
     kernel_cute_scaled_gemm(
         prob_shape, cta_tiler, thread_tiler, 

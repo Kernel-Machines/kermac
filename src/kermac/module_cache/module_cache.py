@@ -26,7 +26,7 @@ def compile_functions(
                 # diag_suppress cutlass: 64-D: declaration does not declare anything
                 # diag_suppress cutlass: 1055-D: declaration does not declare anything
                 diag_suppress=[64,1055],
-                ptxas_options=['-v'] if debug else None,
+                ptxas_options=["-v"] if debug else None,
                 # some good ones
                 # device_code_optimize=True,
                 # extensible_whole_program=True,
@@ -37,6 +37,7 @@ def compile_functions(
                 # prec_sqrt=False,
                 # prec_div=False,
                 # split_compile=8,
+                
                 include_path=[
                     get_include_local_cuda_dir(),   # include/*.cuh
                     get_include_dir_cutlass(),      # thirdparty/cutlass/include
