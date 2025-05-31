@@ -33,7 +33,7 @@ def run_scaled_gemm():
 
     a = torch.randn(M,K,device=pt_device)
     b = torch.randn(N,K,device=pt_device)
-    c = torch.zeros(M,N,device=pt_device)
+    d = torch.zeros(M,N,device=pt_device)
     # print(a.stride())
     # print(a)
     # print(a.stride(0))
@@ -42,13 +42,13 @@ def run_scaled_gemm():
         M, N, K,
         a.data_ptr(), np.uint64(a.stride(0)),
         b.data_ptr(), np.uint64(b.stride(0)),
-        c.data_ptr(), np.uint64(c.stride(0))
+        d.data_ptr(), np.uint64(d.stride(0))
     )
 
     launch(stream, config, kernel, *kernel_args)
     torch.cuda.synchronize()
 
-    print(c)
+    print(d)
     print(b @ a.T)
 
 run_scaled_gemm()

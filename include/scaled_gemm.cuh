@@ -7,7 +7,7 @@ template <
     class ProblemShape, class CtaTiler, class ThreadTiler,
     class AStride, class ASmemLayout, class TiledCopyA,
     class BStride, class BSmemLayout, class TiledCopyB,
-    class CStride, class CSmemLayout,
+    class DStride, class DSmemLayout,
     class T
 >
 __device__
@@ -17,7 +17,7 @@ kernel_cute_scaled_gemm(
     ProblemShape shape_MNK, CtaTiler cta_tiler, ThreadTiler thread_tiler,
     T const *A, AStride dA, ASmemLayout sA_layout, TiledCopyA copy_a,
     T const *B, BStride dB, BSmemLayout sB_layout, TiledCopyB copy_b,
-    T       *C, CStride dC, CSmemLayout
+    T       *D, DStride dD, DSmemLayout
 ) {
     using namespace cute;
 
@@ -31,25 +31,25 @@ kernel_cute_scaled_gemm(
 
     static_assert(is_static<ASmemLayout>::value);
     static_assert(is_static<BSmemLayout>::value);
-    static_assert(is_static<CSmemLayout>::value);
+    static_assert(is_static<DSmemLayout>::value);
 
     CUTE_STATIC_ASSERT_V(size<0>(ASmemLayout{}) == size<0>(cta_tiler));  // BLK_M
-    CUTE_STATIC_ASSERT_V(size<0>(CSmemLayout{}) == size<0>(cta_tiler));  // BLK_M
+    CUTE_STATIC_ASSERT_V(size<0>(DSmemLayout{}) == size<0>(cta_tiler));  // BLK_M
 
     CUTE_STATIC_ASSERT_V(size<0>(BSmemLayout{}) == size<1>(cta_tiler));  // BLK_N
-    CUTE_STATIC_ASSERT_V(size<1>(CSmemLayout{}) == size<1>(cta_tiler));  // BLK_N
+    CUTE_STATIC_ASSERT_V(size<1>(DSmemLayout{}) == size<1>(cta_tiler));  // BLK_N
 
     CUTE_STATIC_ASSERT_V(size<1>(ASmemLayout{}) == size<2>(cta_tiler));  // BLK_K
     CUTE_STATIC_ASSERT_V(size<1>(BSmemLayout{}) == size<2>(cta_tiler));  // BLK_K
 
     CUTE_STATIC_ASSERT_V(congruent(select<0,2>(shape_MNK), dA));       // dA strides for shape MK
     CUTE_STATIC_ASSERT_V(congruent(select<1,2>(shape_MNK), dB));       // dB strides for shape NK
-    CUTE_STATIC_ASSERT_V(congruent(select<0,1>(shape_MNK), dC));       // dC strides for shape MNO
+    CUTE_STATIC_ASSERT_V(congruent(select<0,1>(shape_MNK), dD));       // dC strides for shape MNO
 
     // Represent the full tensors
     Tensor mA = make_tensor(make_gmem_ptr(A), select<0,2>(shape_MNK), dA); // (M,K)
     Tensor mB = make_tensor(make_gmem_ptr(B), select<1,2>(shape_MNK), dB); // (N,K)
-    Tensor mC = make_tensor(make_gmem_ptr(C), select<0,1>(shape_MNK), dC); // (M,N)
+    Tensor mD = make_tensor(make_gmem_ptr(D), select<0,1>(shape_MNK), dD); // (M,N)
 
     auto bidx = blockIdx.x;
     auto bidy = blockIdx.y;
@@ -57,7 +57,7 @@ kernel_cute_scaled_gemm(
     auto cta_coord = make_coord(bidx, bidy, _); // (m,n,k)
     Tensor gA = local_tile(mA, cta_tiler, cta_coord, Step<_1,  X, _1>{}); // (BLK_M,BLK_K,k)
     Tensor gB = local_tile(mB, cta_tiler, cta_coord, Step< X, _1, _1>{}); // (BLK_N,BLK_K,k)
-    Tensor gC = local_tile(mC, cta_tiler, cta_coord, Step<_1, _1,  X>{}); // (BLK_M,BLK_N)
+    Tensor gD = local_tile(mD, cta_tiler, cta_coord, Step<_1, _1,  X>{}); // (BLK_M,BLK_N)
 
     auto m_max_coord = size<0>(shape_MNK) - size<0>(gA) * bidx;  // M - BLK_M * m_coord
     auto n_max_coord = size<1>(shape_MNK) - size<0>(gB) * bidy;  // N - BLK_N * n_coord
@@ -104,23 +104,23 @@ kernel_cute_scaled_gemm(
     CUTE_STATIC_ASSERT_V(K_PIPE_MAX == size<3>(tBsB)); // PIPE B
 
     // Partition the tensors
-    Tensor tCsA = local_partition(sA, thread_tiler, threadIdx.x, Step<_1,  X>{}); // (THR_M,THR_K,PIPE)
-    Tensor tCsB = local_partition(sB, thread_tiler, threadIdx.x, Step< X, _1>{}); // (THR_N,THR_K,PIPE)
-    Tensor tCgC = local_partition(gC, thread_tiler, threadIdx.x, Step<_1, _1>{}); // (THR_M,THR_N)
+    Tensor tDsA = local_partition(sA, thread_tiler, threadIdx.x, Step<_1,  X>{}); // (THR_M,THR_K,PIPE)
+    Tensor tDsB = local_partition(sB, thread_tiler, threadIdx.x, Step< X, _1>{}); // (THR_N,THR_K,PIPE)
+    Tensor tDgD = local_partition(gD, thread_tiler, threadIdx.x, Step<_1, _1>{}); // (THR_M,THR_N)
 
-    Tensor tCrA = make_fragment_like(tCsA(_,_,0)); // (THR_M,THR_K)
-    Tensor tCrB = make_fragment_like(tCsB(_,_,0)); // (THR_N,THR_K)
-    Tensor tCrC = make_fragment_like(tCgC);        // (THR_M,THR_N)
+    Tensor tDrA = make_fragment_like(tDsA(_,_,0)); // (THR_M,THR_K)
+    Tensor tDrB = make_fragment_like(tDsB(_,_,0)); // (THR_N,THR_K)
+    Tensor tDrD = make_fragment_like(tDgD);        // (THR_M,THR_N)
 
     // Create coordinate tensors for the problem for predication
     Tensor cA = make_identity_tensor(make_shape(size<0>(sA), size<1>(sA))); // (M,K) -> (m,k)
     Tensor cB = make_identity_tensor(make_shape(size<0>(sB), size<1>(sB))); // (N,K) -> (n,k)
-    Tensor cC = make_identity_tensor(make_shape(size<0>(gC), size<1>(gC))); // (M,N) -> (m,n)
+    Tensor cD = make_identity_tensor(make_shape(size<0>(gD), size<1>(gD))); // (M,N) -> (m,n)
 
     // Partition coordinate tensors for predication
     Tensor tAcA = thr_copy_a.partition_S(cA);
     Tensor tBcB = thr_copy_b.partition_S(cB);
-    Tensor tCcC = local_partition(cC, thread_tiler, threadIdx.x, Step<_1, _1>{});
+    Tensor tDcD = local_partition(cD, thread_tiler, threadIdx.x, Step<_1, _1>{});
 
     // Current pipe index in smem to read from
     int smem_pipe_read  = 0;
@@ -128,11 +128,11 @@ kernel_cute_scaled_gemm(
     int smem_pipe_write = K_PIPE_MAX-1;
 
     // Pipe slice
-    Tensor tCsA_p = tCsA(_,_,smem_pipe_read);
-    Tensor tCsB_p = tCsB(_,_,smem_pipe_read);
+    Tensor tDsA_p = tDsA(_,_,smem_pipe_read);
+    Tensor tDsB_p = tDsB(_,_,smem_pipe_read);
 
     // Size of the register pipeline
-    auto K_BLOCK_MAX = size<1>(tCrA);
+    auto K_BLOCK_MAX = size<1>(tDrA);
 
     Tensor tApA = make_tensor<bool>(
         make_shape(size<1>(tAsA), size<2>(tAsA)),
@@ -198,7 +198,7 @@ kernel_cute_scaled_gemm(
     }
 
     // Clear accumulators
-    clear(tCrC);
+    clear(tDrD);
 
     // PREFETCH register pipeline
     if (K_BLOCK_MAX > 1) {
@@ -207,8 +207,8 @@ kernel_cute_scaled_gemm(
         __syncthreads();
     
         // Prefetch the first rmem from the first k-tile
-        copy(tCsA_p(_,Int<0>{}), tCrA(_,Int<0>{}));
-        copy(tCsB_p(_,Int<0>{}), tCrB(_,Int<0>{}));
+        copy(tDsA_p(_,Int<0>{}), tDrA(_,Int<0>{}));
+        copy(tDsB_p(_,Int<0>{}), tDrB(_,Int<0>{}));
     }
 
     // Main LOOP!
@@ -218,8 +218,8 @@ kernel_cute_scaled_gemm(
         for (int k_block = 0; k_block < K_BLOCK_MAX; ++k_block) {
             if (k_block == K_BLOCK_MAX - 1) {
                 // Slice the smem_pipe_read smem
-                tCsA_p = tCsA(_,_,smem_pipe_read);
-                tCsB_p = tCsB(_,_,smem_pipe_read);
+                tDsA_p = tDsA(_,_,smem_pipe_read);
+                tDsB_p = tDsB(_,_,smem_pipe_read);
 
                 // Commit the smem for smem_pipe_read
                 cp_async_wait<K_PIPE_MAX-2>();
@@ -228,8 +228,8 @@ kernel_cute_scaled_gemm(
 
             // Load A, B shmem->regs for k_block+1
             auto k_block_next = (k_block + Int<1>{}) % K_BLOCK_MAX;
-            copy(tCsA_p(_,k_block_next), tCrA(_,k_block_next));
-            copy(tCsB_p(_,k_block_next), tCrB(_,k_block_next));
+            copy(tDsA_p(_,k_block_next), tDrA(_,k_block_next));
+            copy(tDsB_p(_,k_block_next), tDrB(_,k_block_next));
             // Copy gmem to smem before computing gemm on each k-pipe
             if (k_block == 0) {
                 // Set all predicates to false if we are going to overshoot bounds
@@ -252,11 +252,11 @@ kernel_cute_scaled_gemm(
             }
 
             CUTE_UNROLL
-            for (int m = 0; m < size<0>(tCrC); m++) {
+            for (int m = 0; m < size<0>(tDrD); m++) {
                 CUTE_UNROLL
-                for (int n = 0; n < size<1>(tCrC); n++) {
-                    T v = tCrB(n,k_block) * tCrA(m,k_block);
-                    tCrC(m,n) += v;
+                for (int n = 0; n < size<1>(tDrD); n++) {
+                    T v = tDrB(n,k_block) * tDrA(m,k_block);
+                    tDrD(m,n) += v;
                 }
             }
         }
@@ -264,9 +264,9 @@ kernel_cute_scaled_gemm(
 
     // Write accumulators
     CUTE_UNROLL
-    for (int i = 0; i < size(tCrC); i++) {
-        if (elem_less(tCcC(i), make_coord(m_max_coord,n_max_coord))) {
-            tCgC(i) = tCrC(i);
+    for (int i = 0; i < size(tDrD); i++) {
+        if (elem_less(tDcD(i), make_coord(m_max_coord,n_max_coord))) {
+            tDgD(i) = tDrD(i);
         }
     }
 }
@@ -279,7 +279,7 @@ cute_scaled_gemm(
     i32 m, i32 n, i32 k,
     T const *A, u64 ldA,
     T const *B, u64 ldB,
-    T       *C, u64 ldC
+    T       *D, u64 ldD
 ) {
     using namespace cute;
 
@@ -296,7 +296,7 @@ cute_scaled_gemm(
     auto prob_shape = make_shape(M,N,K);
     auto dA = make_stride(ldA, Int<1>{});
     auto dB = make_stride(ldB, Int<1>{});
-    auto dC = make_stride(Int<1>{}, ldC);
+    auto dD = make_stride(Int<1>{}, ldD);
 
     auto sA_atom = make_layout(
         make_shape(bM, bK),
@@ -309,7 +309,7 @@ cute_scaled_gemm(
         make_stride(Int<1>{}, bN+Int<4>{})
     );
     auto sB = tile_to_shape(sB_atom, make_shape(bN, bK, bP));
-    auto sC = make_layout(make_shape(bM, bN));
+    auto sD = make_layout(make_shape(bM, bN));
 
     auto copyA = 
         make_tiled_copy(
@@ -330,6 +330,6 @@ cute_scaled_gemm(
         prob_shape, cta_tiler, thread_tiler, 
         A, dA, sA, copyA,
         B, dB, sB, copyB,
-        C, dC, sC
+        D, dD, sD
     );
 }
