@@ -22,33 +22,37 @@ def run_scaled_gemm():
 
     M = 128
     N = 128
+    O = 32
     K = 16
 
-    num_blocks_M = ceil_div(M, 128)
-    num_blocks_N = ceil_div(N, 128)
+    num_blocks_M = ceil_div(M, 32)
+    num_blocks_N = ceil_div(N, 32)
+    num_blocks_O = ceil_div(O, 32)
     # num_batches = L
 
-    grid = (num_blocks_M, num_blocks_N)
+    grid = (num_blocks_M, num_blocks_N, num_blocks_O)
     config = LaunchConfig(grid=grid, block=256)
 
     a = torch.randn(M,K,device=pt_device)
     b = torch.randn(N,K,device=pt_device)
-    d = torch.zeros(M,N,device=pt_device)
+    c = torch.ones(O,K,device=pt_device)/2.0
+    d = torch.zeros(O,N,M,device=pt_device)
     # print(a.stride())
     # print(a)
     # print(a.stride(0))
     # a = torch.randn(M,K, device=pt_device)
     kernel_args = (
-        M, N, K,
+        M, N, O, K,
         a.data_ptr(), np.uint64(a.stride(0)),
         b.data_ptr(), np.uint64(b.stride(0)),
-        d.data_ptr(), np.uint64(d.stride(0))
+        c.data_ptr(), np.uint64(c.stride(0)),
+        d.data_ptr(), np.uint64(d.stride(1)), np.uint64(d.stride(0))
     )
 
     launch(stream, config, kernel, *kernel_args)
     torch.cuda.synchronize()
 
     print(d)
-    print(b @ a.T)
+    print(torch.einsum('mk,nk,ok->onm', a, b, c))
 
 run_scaled_gemm()
