@@ -7,7 +7,10 @@ from cuda.core.experimental import Device, LaunchConfig, launch
 from kermac import ceil_div
 
 def run_scaled_gemm():
-    function_name = 'cute_scaled_gemm<float>'
+    
+    BOsize = 2
+
+    function_name = f'cute_scaled_gemm<{BOsize}, float>'
     pt_device = torch.device('cuda')
 
     pt_stream = torch.cuda.current_stream()
@@ -19,15 +22,19 @@ def run_scaled_gemm():
     debug = True
     module_cache = kermac.ModuleCache(debug)
     kernel = module_cache.get_function(device, function_name, debug=debug)
+    # module_cache.compile_and_cache_functions(
+    #     device,
 
-    M = 128
-    N = 128
-    O = 32
-    K = 16
+    # )
+
+    M = 1001
+    N = 1001
+    O = 33
+    K = 17
 
     num_blocks_M = ceil_div(M, 32)
     num_blocks_N = ceil_div(N, 32)
-    num_blocks_O = ceil_div(O, 32)
+    num_blocks_O = ceil_div(O, BOsize)
     # num_batches = L
 
     grid = (num_blocks_M, num_blocks_N, num_blocks_O)
@@ -52,7 +59,12 @@ def run_scaled_gemm():
     launch(stream, config, kernel, *kernel_args)
     torch.cuda.synchronize()
 
-    print(d)
-    print(torch.einsum('mk,nk,ok->onm', a, b, c))
+    kermac_out = d
+    torch_out = torch.einsum('mk,nk,ok->onm', a, b, c)
+
+    print('')
+    print(f'\t\t{torch.max(kermac_out - torch_out).item():.3e}')
+    print('')
+    # print(torch_out)
 
 run_scaled_gemm()

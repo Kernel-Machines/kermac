@@ -29,7 +29,7 @@ kernel_cute_scaled_gemm(
 
     CUTE_STATIC_ASSERT_V(size(copy_a) == size(thread_tiler)); // NumThreads
     CUTE_STATIC_ASSERT_V(size(copy_b) == size(thread_tiler)); // NumThreads
-    CUTE_STATIC_ASSERT_V(size(copy_c) == size(thread_tiler)); // NumThreads
+    // CUTE_STATIC_ASSERT_V(size(copy_c) == size(thread_tiler)); // NumThreads
 
     static_assert(is_static<ASmemLayout>::value);
     static_assert(is_static<BSmemLayout>::value);
@@ -185,7 +185,7 @@ kernel_cute_scaled_gemm(
     }
     CUTE_UNROLL
     for (int o = 0; o < size<0>(tCpC); o++) {
-        tCpC(o,0) = get<0>(tCcC(0,o,0)) < o_max_coord;
+        tCpC(o,0) = get<0>(tCcC(0,o,0)) < o_max_coord && threadIdx.x < size(copy_c);
     }
 
     // Print all tensor shapes/data here before anything functionally happens such as copies
@@ -325,7 +325,10 @@ kernel_cute_scaled_gemm(
     }
 }
 
-template<class T>
+template<
+    int bo_size,
+    class T
+>
 __global__
 __launch_bounds__(256)
 void
@@ -345,7 +348,7 @@ cute_scaled_gemm(
 
     auto bM = Int<32>{};
     auto bN = Int<32>{};
-    auto bO = Int<32>{};
+    auto bO = Int<bo_size>{};
     auto bK = Int<8>{};
     auto cta_tiler = make_shape(bM, bN, bO, bK);
     auto bP = Int<3>{};
@@ -368,9 +371,21 @@ cute_scaled_gemm(
     );
     auto sB = tile_to_shape(sB_atom, make_shape(bN, bK, bP));
 
+    auto o_stride = [bO,bK] {
+        if constexpr(bo_size == 32 || bo_size == 16) {
+            return make_stride(Int<1>{}, bO+Int<4>{});
+        } else if constexpr (bo_size == 8) {
+            // ?
+            return make_stride(bK+Int<1>{}, Int<1>{});
+        } else if constexpr (bo_size == 4) {
+            // ?
+        } else if constexpr (bo_size == 2 || bo_size == 1) {
+            return make_stride(Int<8>{}, Int<1>{});
+        }
+    }();
+
     auto sC_atom = make_layout(
-        make_shape(bO, bK),
-        make_stride(Int<1>{}, bO+Int<4>{})
+        make_shape(bO, bK), o_stride
     );
     auto sC = tile_to_shape(sC_atom, make_shape(bO, bK, bP));
 
@@ -378,21 +393,21 @@ cute_scaled_gemm(
 
     auto copyA = 
         make_tiled_copy(
-            Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
+            Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<T>, T>{},
             Layout<Shape<_32,_8>, Stride<_8,_1>>{},
             Layout<Shape<_1,_1>>{}
         );
     auto copyB = 
         make_tiled_copy(
-            Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
+            Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<T>, T>{},
             Layout<Shape<_32,_8>, Stride<_8,_1>>{},
             Layout<Shape<_1,_1>>{}
         );
 
     auto copyC = 
         make_tiled_copy(
-            Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS_ZFILL<T>, T>{},
-            Layout<Shape<_32,_8>, Stride<_8,_1>>{},
+            Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<T>, T>{},
+            Layout<Shape<decltype(bO),_8>, Stride<_8,_1>>{},
             Layout<Shape<_1,_1>>{}
         );
 
