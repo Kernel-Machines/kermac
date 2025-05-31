@@ -326,20 +326,22 @@ kernel_cute_scaled_gemm(
 }
 
 template<
-    int bo_size,
-    class T
+    int bo_size
 >
 __global__
 __launch_bounds__(256)
 void
 cute_scaled_gemm(
     int m, int n, int o, int k,
-    T const *A, size_t ldA,
-    T const *B, size_t ldB,
-    T const *C, size_t ldC,
-    T       *D, size_t ldD_N, size_t ldD_O
+    float const *A, size_t ldA,
+    float const *B, size_t ldB,
+    float const *C, size_t ldC,
+    float       *D, size_t ldD_N, size_t ldD_O
 ) {
+    static_assert(bo_size == 1 || bo_size == 2 || bo_size == 16 || bo_size == 32);
+
     using namespace cute;
+    using T = float;
 
     auto M = size_t(m);
     auto N = size_t(n);
@@ -374,11 +376,8 @@ cute_scaled_gemm(
     auto o_stride = [bO,bK] {
         if constexpr(bo_size == 32 || bo_size == 16) {
             return make_stride(Int<1>{}, bO+Int<4>{});
-        } else if constexpr (bo_size == 8) {
-            // ?
-            return make_stride(bK+Int<1>{}, Int<1>{});
-        } else if constexpr (bo_size == 4) {
-            // ?
+        } else if constexpr (bo_size == 8) { // ?
+        } else if constexpr (bo_size == 4) { // ?
         } else if constexpr (bo_size == 2 || bo_size == 1) {
             return make_stride(Int<8>{}, Int<1>{});
         }

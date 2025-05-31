@@ -8,9 +8,9 @@ from kermac import ceil_div
 
 def run_scaled_gemm():
     
-    BOsize = 2
+    BOsize = 16
 
-    function_name = f'cute_scaled_gemm<{BOsize}, float>'
+    function_name = f'cute_scaled_gemm<{BOsize}>'
     pt_device = torch.device('cuda')
 
     pt_stream = torch.cuda.current_stream()
@@ -21,11 +21,15 @@ def run_scaled_gemm():
 
     debug = True
     module_cache = kermac.ModuleCache(debug)
+    def compile_functions():
+        function_names = [f'cute_scaled_gemm<{BOsize}>' for BOsize in [1,2,16,32]]
+        module_cache.compile_and_cache_functions(
+            device,
+            function_names=function_names,
+            debug=debug
+        )
+    compile_functions()
     kernel = module_cache.get_function(device, function_name, debug=debug)
-    # module_cache.compile_and_cache_functions(
-    #     device,
-
-    # )
 
     M = 1001
     N = 1001
