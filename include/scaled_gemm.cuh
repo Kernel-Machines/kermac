@@ -1,6 +1,5 @@
 #pragma once
 
-#include <kermac_internal_common.cuh>
 #include <cute/tensor.hpp>
 
 template <
@@ -44,7 +43,7 @@ kernel_cute_scaled_gemm(
     CUTE_STATIC_ASSERT_V(size<1>(DSmemLayout{}) == size<1>(cta_tiler));  // BLK_N
 
     CUTE_STATIC_ASSERT_V(size<0>(CSmemLayout{}) == size<2>(cta_tiler));  // BLK_O
-    CUTE_STATIC_ASSERT_V(size<1>(DSmemLayout{}) == size<2>(cta_tiler));  // BLK_O
+    CUTE_STATIC_ASSERT_V(size<2>(DSmemLayout{}) == size<2>(cta_tiler));  // BLK_O
 
     CUTE_STATIC_ASSERT_V(size<1>(ASmemLayout{}) == size<3>(cta_tiler));  // BLK_K
     CUTE_STATIC_ASSERT_V(size<1>(BSmemLayout{}) == size<3>(cta_tiler));  // BLK_K
@@ -331,18 +330,18 @@ __global__
 __launch_bounds__(256)
 void
 cute_scaled_gemm(
-    i32 m, i32 n, i32 o, i32 k,
-    T const *A, u64 ldA,
-    T const *B, u64 ldB,
-    T const *C, u64 ldC,
-    T       *D, u64 ldD_N, u64 ldD_O
+    int m, int n, int o, int k,
+    T const *A, size_t ldA,
+    T const *B, size_t ldB,
+    T const *C, size_t ldC,
+    T       *D, size_t ldD_N, size_t ldD_O
 ) {
     using namespace cute;
 
-    auto M = u64(m);
-    auto N = u64(n);
-    auto O = u64(o);
-    auto K = u64(k);
+    auto M = size_t(m);
+    auto N = size_t(n);
+    auto O = size_t(o);
+    auto K = size_t(k);
 
     auto bM = Int<32>{};
     auto bN = Int<32>{};

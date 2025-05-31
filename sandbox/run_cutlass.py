@@ -35,7 +35,7 @@ def run_scaled_gemm():
 
     a = torch.randn(M,K,device=pt_device)
     b = torch.randn(N,K,device=pt_device)
-    c = torch.ones(O,K,device=pt_device)/2.0
+    c = torch.randn(O,K,device=pt_device)
     d = torch.zeros(O,N,M,device=pt_device)
     # print(a.stride())
     # print(a)
