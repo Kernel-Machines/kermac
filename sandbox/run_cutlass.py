@@ -4,8 +4,10 @@ import numpy as np
 
 from cuda.core.experimental import Device, LaunchConfig, launch
 
-def run_cute():
-    function_name = 'cutlass_little_test'
+from kermac import ceil_div
+
+def run_scaled_gemm():
+    function_name = 'cute_scaled_gemm<float>'
     pt_device = torch.device('cuda')
 
     pt_stream = torch.cuda.current_stream()
@@ -18,26 +20,35 @@ def run_cute():
     module_cache = kermac.ModuleCache(debug)
     kernel = module_cache.get_function(device, function_name, debug=debug)
 
-    grid = (1)
+    M = 128
+    N = 128
+    K = 16
+
+    num_blocks_M = ceil_div(M, 128)
+    num_blocks_N = ceil_div(N, 128)
+    # num_batches = L
+
+    grid = (num_blocks_M, num_blocks_N)
     config = LaunchConfig(grid=grid, block=256)
 
-    M = int(32)
-    K = int(16)
-      # Define device (use 'cuda' if GPU is available)
-    a = torch.arange((M * K), dtype=torch.float32, device=pt_device)
-    a = a.reshape((M, K))  # Reshape to (100, 16)
+    a = torch.randn(M,K,device=pt_device)
+    b = torch.randn(N,K,device=pt_device)
+    c = torch.zeros(M,N,device=pt_device)
     # print(a.stride())
     # print(a)
     # print(a.stride(0))
     # a = torch.randn(M,K, device=pt_device)
-    ldA = np.uint64(a.stride(0))
     kernel_args = (
-        M, K,
-        a.data_ptr(), 
-        ldA
+        M, N, K,
+        a.data_ptr(), np.uint64(a.stride(0)),
+        b.data_ptr(), np.uint64(b.stride(0)),
+        c.data_ptr(), np.uint64(c.stride(0))
     )
 
     launch(stream, config, kernel, *kernel_args)
     torch.cuda.synchronize()
 
-run_cute()
+    print(c)
+    print(b @ a.T)
+
+run_scaled_gemm()
