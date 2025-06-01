@@ -292,7 +292,6 @@ kernel_cute_scaled_gemm(
                 copy_if(copy_a, tApA, tAgA(_,_,_,k_tile_next), tAsA(_,_,_,smem_pipe_write));
                 copy_if(copy_b, tBpB, tBgB(_,_,_,k_tile_next), tBsB(_,_,_,smem_pipe_write));
                 copy_if(copy_c, tCpC, tCgC(_,_,_,k_tile_next), tCsC(_,_,_,smem_pipe_write));
-
                 cp_async_fence();
                 __syncthreads();
 
@@ -344,7 +343,7 @@ cute_scaled_gemm(
     float       *D, size_t ldD_N, size_t ldD_O
 ) {
     static_assert(cta_m == 32 || cta_m == 64 || cta_m == 128);
-    static_assert(cta_n == 16 || cta_n == 32 || cta_n == 64 || cta_n == 128);
+    static_assert(cta_n == 32 || cta_n == 64 || cta_n == 128);
     static_assert(cta_o == 1 || cta_o == 2 || cta_o == 4 || cta_o == 8 || cta_o == 16 || cta_o == 32);
 
     using namespace cute;
@@ -391,7 +390,7 @@ cute_scaled_gemm(
             return make_stride(Int<8>{}, Int<1>{});
         }
     }();
-    
+
 
     auto sC_atom = make_layout(
         make_shape(bO, bK), o_stride
@@ -406,21 +405,13 @@ cute_scaled_gemm(
             Layout<Shape<_32,_8>, Stride<_8,_1>>{},
             Layout<Shape<_1,_1>>{}
         );
-    auto copyB = [] {
-        if constexpr (cta_n >= 32) {
-            return make_tiled_copy(
-                Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<T>, T>{},
-                Layout<Shape<_32,_8>, Stride<_8,_1>>{},
-                Layout<Shape<_1,_1>>{}
-            );
-        } else {
-            return make_tiled_copy(
-                Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<T>, T>{},
-                Layout<Shape<decltype(bN),_8>, Stride<_8,_1>>{},
-                Layout<Shape<_1,_1>>{}
-            );
-        }
-    }();
+
+    auto copyB = 
+        make_tiled_copy(
+            Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<T>, T>{},
+            Layout<Shape<_32,_8>, Stride<_8,_1>>{},
+            Layout<Shape<_1,_1>>{}
+        );
 
     auto copyC =
         make_tiled_copy(
@@ -430,14 +421,6 @@ cute_scaled_gemm(
         );
 
     auto thread_tiler = Layout<Shape<_16,_16,_1>>{}; // M, N, O
-
-    // if (thread0()) {
-    //     print(cta_m); print("\n");
-    //     print(cta_n); print("\n");
-    //     print(cta_o); print("\n");
-    //     print(size(copyB)); print("\n");
-    //     print(size(copyC)); print("\n");
-    // }
 
     kernel_cute_scaled_gemm(
         prob_shape, cta_tiler, thread_tiler, 
