@@ -22,6 +22,16 @@ pip install "kermac[cu12] @ git+https://github.com/Kernel-Machines/kermac"
 pip install "kermac[cu11] @ git+https://github.com/Kernel-Machines/kermac"
 ```
 
+### Linalg
+linalg functionality depends on nvmath-python. This isn't a required dependency. To run linalg routines please do:
+``` bash
+pip install nvmath-python[cu12]
+```
+or
+``` bash
+pip install nvmath-python[cu11]
+```
+
 # Examples
 From a fresh environment you can do:
 ## [`cdist.py`](examples/cdist.py)
