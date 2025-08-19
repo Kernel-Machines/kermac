@@ -12,12 +12,12 @@ Kermac relies on [**cuda-core**](https://nvidia.github.io/cuda-python/cuda-core/
 
 ### CUDA 12
 ``` bash
-pip install "kermac[cu12] @ git+https://github.com/Kernel-Machines/kermac"
+pip install kermac[cu12]
 ```
 
 ### CUDA 11
 ``` bash
-pip install "kermac[cu11] @ git+https://github.com/Kernel-Machines/kermac"
+pip install kermac[cu11]
 ```
 
 ### Linalg
