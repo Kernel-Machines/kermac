@@ -1,5 +1,3 @@
-![function](media/frame179_2min_crop.jpg)
-
 # KERMAC
 
 Kermac is a collection of fused CUDA kernels meant for fast and memory efficient computation for kernel methods. Kermac makes heavy use of JIT (Just-in-time) compilation to generate custom CUDA kernels on demand. These compiled kernels are stored in a cache database so the JIT costs are only incurred once. Using `debug=True` in most kermac routines will print information related to the compilation and caching of these JIT CUDA kernels.
