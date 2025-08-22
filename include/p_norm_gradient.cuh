@@ -382,6 +382,7 @@ kernel_cute_p_norm_kernel_gradient(
                         diff = diff;
                     } else {
                         diff = _abs(diff);
+                        diff = diff < 1e-8f ? 1e-8f : diff;
                         diff = _pow(diff, p_power_grad);
                         diff = diff * sign;
                     }
