@@ -64,7 +64,10 @@ enum class PowerType {
     ABS,
     SQUARE,
     SQRT,
-    POW
+    POW,
+    // exp(pow(abs(x), p) * scale)
+    // Used for kernels like sum_i exp(|xi-zi|^p / L^p) where scale = 1/L^p.
+    EXP_POW_SCALED
 };
 
 enum class KernelType {

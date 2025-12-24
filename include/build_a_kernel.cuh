@@ -92,10 +92,13 @@ kernel_cute_build_kernel(
 
     T p_power_inner = T(0);
     T p_power_outer = T(0);
+    // For kernel_type != NONE this is a "bandwidth" parameter used by the epilogue.
+    // For inner_power == EXP_POW_SCALED we interpret it as an arbitrary scale factor
+    // (e.g. scale = 1 / L^p).
     T bandwidth = T(0);
     T regularization = T(0);
 
-    if constexpr (inner_power == PowerType::POW) {
+    if constexpr (inner_power == PowerType::POW || inner_power == PowerType::EXP_POW_SCALED) {
         p_power_inner = mPPI(bidz);
     }
 
@@ -106,6 +109,10 @@ kernel_cute_build_kernel(
     if constexpr (kernel_type != KernelType::NONE) {
         bandwidth = mBANDWIDTH(bidz);
         regularization = mREGULARIZATION(bidz);
+    }
+    // Even when kernel_type == NONE, EXP_POW_SCALED needs the scale parameter.
+    if constexpr (inner_power == PowerType::EXP_POW_SCALED) {
+        bandwidth = mBANDWIDTH(bidz);
     }
 
     auto cta_coord = make_coord(bidx, bidy, _); // (m,n,k)
@@ -361,6 +368,15 @@ kernel_cute_build_kernel(
                     } else if constexpr (inner_power == PowerType::POW) {
                         diff = _abs(diff);
                         diff = _pow(diff, p_power_inner);
+                    } else if constexpr (inner_power == PowerType::EXP_POW_SCALED) {
+                        diff = _abs(diff);
+                        diff = _pow(diff, p_power_inner);
+                        diff = diff * bandwidth;
+                        // IMPORTANT: K is processed in tiles and out-of-bounds K reads are zero-filled.
+                        // For this kernel, zero-filled entries would produce exp(0) = 1 which adds a constant
+                        // offset equal to padding. Subtracting 1 here makes padded entries contribute 0.
+                        // The caller should add +K to the final result (or fold it into `c`).
+                        diff = _exp(diff) - T(1.0);
                     } else {
                         diff = _nan<T>();
                     }

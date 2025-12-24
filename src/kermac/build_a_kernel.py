@@ -24,6 +24,8 @@ class PowerType(Enum):
     SQUARE = auto()
     SQRT = auto()
     POW = auto()
+    # exp(pow(abs(x), p) * scale). We reuse `bandwidth` as the scale parameter.
+    EXP_POW_SCALED = auto()
 
 # For templates to dictate the type of
 # kernel to apply
@@ -134,7 +136,7 @@ def run_kernel(
     try_to_align : bool = False,
     debug = False
 ):
-    if kernel_descriptor._inner_power is PowerType.POW:
+    if kernel_descriptor._inner_power is PowerType.POW or kernel_descriptor._inner_power is PowerType.EXP_POW_SCALED:
         if p is None and inner_p is None:
             raise ValueError("'inner_power' 'PowerType' is 'Pow' but 'p' and 'inner_p' is not set")
     else:
@@ -145,15 +147,21 @@ def run_kernel(
         if p is None and outer_p is None:
             raise ValueError("'outer_power' 'PowerType' is 'Pow' but 'p' and 'outer_p' is not set")
     else:
-        if p is not None or outer_p is not None:
-            raise ValueError("'outer_power' 'PowerType' is not 'Pow' but 'p' or 'outer_p' is set")
+        # `p` may be used by the inner op (e.g. POW / EXP_POW_SCALED) even when outer is NOOP.
+        # Only forbid explicitly setting `outer_p` when the outer doesn't consume it.
+        if outer_p is not None:
+            raise ValueError("'outer_power' 'PowerType' is not 'Pow' but 'outer_p' is set")
         
     if kernel_descriptor._kernel_type is KernelType.NONE:
-        if bandwidth is not None or epsilon is not None or regularization is not None:
+        # Special-case: EXP_POW_SCALED needs `bandwidth` as a generic scale parameter.
+        if (bandwidth is not None and kernel_descriptor._inner_power is not PowerType.EXP_POW_SCALED) or epsilon is not None or regularization is not None:
             raise ValueError("'KernelType' is 'None' but 'bandwidth' or 'epsilon' or 'regularization' is set")
     else:
         if bandwidth is None:
             raise ValueError("'KernelType' is not 'None' but 'bandwidth' is not set")
+
+    if kernel_descriptor._inner_power is PowerType.EXP_POW_SCALED and bandwidth is None:
+        raise ValueError("'inner_power' is 'EXP_POW_SCALED' but 'bandwidth' (used as scale) is not set")
         
     if p is not None and inner_p is not None:
         raise ValueError("'p' is not 'None' but 'inner_p' is also not 'None")

@@ -126,5 +126,35 @@ def main():
         print('torch MMA')
         print((a @ b.T))
 
+    # Example: fused sum_i exp(|xi-zi|^p / L^p)
+    # This matches kernels of the form:
+    #   s(x,z) = sum_i exp(|xi-zi|^p / L^p)
+    # You can then build:
+    #   k(x,z) = (c + s(x,z))^q
+    print('Running sum_i exp(|xi-zi|^p / L^p) (fused inner exp)')
+    p = 1.3
+    L = 2.5
+    c = 0.1
+    q = 2.0
+    scale = 1.0 / (L ** p)
+    exp_descriptor = kermac.KernelDescriptor(
+        inner_operator=kermac.InnerOperator.DIFF,
+        inner_power=kermac.PowerType.EXP_POW_SCALED,
+        outer_power=kermac.PowerType.NOOP,
+        kernel_type=kermac.KernelType.NONE,
+    )
+    s = kermac.run_kernel(
+        exp_descriptor,
+        a, b,
+        bandwidth=scale,  # interpreted as `scale` for EXP_POW_SCALED
+        p=p,
+        try_to_align=try_to_align,
+        debug=debug
+    )
+    # EXP_POW_SCALED computes sum_i (exp(...) - 1), so add back +K (or fold it into `c`).
+    s = s + a.shape[-1]
+    k = (c + s).pow(q)
+    print(k)
+
 if __name__ == '__main__':
     main()
