@@ -6,8 +6,7 @@ import sqlite3
 import os
 import hashlib
 
-from cuda.core.experimental._module import Kernel
-from cuda.core.experimental import Device, Program, ProgramOptions, ObjectCode
+from cuda.core.experimental import Kernel, Device, Program, ProgramOptions, ObjectCode
 import cuda.pathfinder
 
 from .function_db_key import *
